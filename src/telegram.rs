@@ -43,7 +43,7 @@ impl Telegram {
         )
     }
 
-    fn _send(&self, id: &str, msg: &str) -> Box<dyn Future<Item = (), Error = ()> + Send> {
+    fn send(&self, id: &str, msg: &str) -> Box<dyn Future<Item = (), Error = ()> + Send> {
         Box::new(
             self.client
                 .post(self.prefix.join("sendMessage").unwrap())
@@ -70,7 +70,7 @@ impl Future for Telegram {
         match &mut self.send_future {
             None => {
                 if let Some((id, msg)) = to_send() {
-                    self.send_future = Some(self._send(&id, &msg));
+                    self.send_future = Some(self.send(&id, &msg));
                     task::current().notify();
                     return Ok(Async::NotReady);
                 }
