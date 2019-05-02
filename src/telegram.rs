@@ -1,3 +1,4 @@
+use crate::utils::{send, to_send};
 use futures::{task, try_ready, Async, Future, Poll};
 use log::{error, info};
 use serde_json::{json, Value};
@@ -8,7 +9,6 @@ pub struct Telegram {
     master: String,
     offset: i64,
     get_future: Option<Box<dyn Future<Item = Value, Error = ()> + Send>>,
-    send_queue: std::collections::VecDeque<(String, String)>,
     send_future: Option<Box<dyn Future<Item = (), Error = ()> + Send>>,
 }
 
@@ -27,13 +27,8 @@ impl Telegram {
             master: master,
             offset: 0,
             get_future: None,
-            send_queue: Default::default(),
             send_future: None,
         }
-    }
-
-    pub fn send(&mut self, id: &str, msg: &str) {
-        self.send_queue.push_back((id.to_owned(), msg.to_owned()));
     }
 
     fn get(&self) -> Box<dyn Future<Item = Value, Error = ()> + Send> {
@@ -74,7 +69,7 @@ impl Future for Telegram {
     fn poll(&mut self) -> Poll<(), ()> {
         match &mut self.send_future {
             None => {
-                if let Some((id, msg)) = self.send_queue.pop_front() {
+                if let Some((id, msg)) = to_send() {
                     self.send_future = Some(self._send(&id, &msg));
                     task::current().notify();
                     return Ok(Async::NotReady);
@@ -122,7 +117,7 @@ impl Future for Telegram {
             if let Value::String(text) = &m["text"] {
                 info!("tg recv {}", text);
                 // TODO
-                self.send(&cid, text);
+                send(&cid, text);
             }
         }
 
