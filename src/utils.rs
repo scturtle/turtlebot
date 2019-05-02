@@ -1,3 +1,4 @@
+use diesel::prelude::{Connection, SqliteConnection};
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 
@@ -15,4 +16,10 @@ pub fn send(id: &str, msg: &str) {
 
 pub fn to_send() -> Option<(String, String)> {
     SEND_QUEUE.lock().unwrap().pop_front()
+}
+
+pub fn establish_connection() -> SqliteConnection {
+    let database_url = std::env::var("DATABASE_URL").unwrap();
+    SqliteConnection::establish(&database_url)
+        .unwrap_or_else(|_| panic!("Error connecting to {}", database_url))
 }
