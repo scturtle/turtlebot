@@ -1,11 +1,13 @@
-use crate::utils::{send, to_send};
-use futures::{task, try_ready, Async, Future, Poll};
+use crate::dispatcher::Dispatcher;
+use crate::utils::to_send;
+use futures::{task, Async, Future, Poll};
 use log::{error, info};
 use serde_json::{json, Value};
 
 pub struct Telegram {
     prefix: reqwest::Url,
     client: reqwest::r#async::Client,
+    dispatcher: Dispatcher,
     master: String,
     offset: i64,
     get_future: Option<Box<dyn Future<Item = Value, Error = ()> + Send>>,
@@ -24,6 +26,7 @@ impl Telegram {
                 .timeout(std::time::Duration::from_secs(60))
                 .build()
                 .unwrap(),
+            dispatcher: Dispatcher::new(),
             master: master,
             offset: 0,
             get_future: None,
@@ -76,7 +79,11 @@ impl Future for Telegram {
                 }
             }
             Some(send) => {
-                try_ready!(send.poll());
+                match send.poll() {
+                    Ok(Async::Ready(_)) => {}
+                    Ok(Async::NotReady) => return Ok(Async::NotReady),
+                    Err(_) => error!("send error"),
+                }
                 self.send_future = None;
             }
         }
@@ -87,37 +94,48 @@ impl Future for Telegram {
                 task::current().notify();
                 return Ok(Async::NotReady);
             }
-            Some(get) => {
-                let j = try_ready!(get.poll());
-                self.get_future = None;
-                j
-            }
+            Some(get) => match get.poll() {
+                Ok(Async::Ready(j)) => {
+                    self.get_future = None;
+                    j
+                }
+                Ok(Async::NotReady) => return Ok(Async::NotReady),
+                Err(_) => {
+                    self.get_future = None;
+                    error!("send error");
+                    task::current().notify();
+                    return Ok(Async::NotReady);
+                }
+            },
         };
 
-        for m in j["result"].as_array().unwrap() {
-            let new_offset = m["update_id"].as_i64().unwrap_or(0);
-            self.offset = i64::max(self.offset, new_offset + 1);
-            if !m["inline_query"].is_null() || !m["chosen_inline_result"].is_null() {
-                continue;
-            }
-            let m = match m["message"]
-                .as_object()
-                .or_else(|| m["edited_message"].as_object())
-            {
-                Some(m) => m,
-                _ => continue,
-            };
-            let cid = match &m["chat"]["id"] {
-                Value::Number(cid) => cid.to_string(),
-                _ => continue,
-            };
-            if cid != self.master {
-                continue;
-            }
-            if let Value::String(text) = &m["text"] {
-                info!("tg recv {}", text);
-                // TODO
-                send(&cid, text);
+        if Value::Bool(true) != j["ok"] {
+            error!("polling error: {:?}", j["description"]);
+        } else {
+            for m in j["result"].as_array().unwrap() {
+                let new_offset = m["update_id"].as_i64().unwrap_or(0);
+                self.offset = i64::max(self.offset, new_offset + 1);
+                if !m["inline_query"].is_null() || !m["chosen_inline_result"].is_null() {
+                    continue;
+                }
+                let m = match m["message"]
+                    .as_object()
+                    .or_else(|| m["edited_message"].as_object())
+                {
+                    Some(m) => m,
+                    _ => continue,
+                };
+                let cid = match &m["chat"]["id"] {
+                    Value::Number(cid) => cid.to_string(),
+                    _ => continue,
+                };
+                if cid != self.master {
+                    continue;
+                }
+                if let Value::String(text) = &m["text"] {
+                    info!("tg recv {}", text);
+                    self.dispatcher.dispatch(&cid, text);
+                }
             }
         }
 

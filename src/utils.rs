@@ -23,3 +23,8 @@ pub fn establish_connection() -> SqliteConnection {
     SqliteConnection::establish(&database_url)
         .unwrap_or_else(|_| panic!("Error connecting to {}", database_url))
 }
+
+pub fn format_time(time: &chrono::NaiveDateTime) -> String {
+    use chrono::offset::TimeZone;
+    chrono_tz::Asia::Shanghai.from_utc_datetime(time).format("%m-%d %H:%M").to_string()
+}
