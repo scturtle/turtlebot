@@ -1,5 +1,6 @@
 use crate::follow_status::FollowStatus;
 use crate::models::FollowLog;
+use crate::utils::FutureBox;
 use diesel::prelude::*;
 use futures::future::IntoFuture;
 use futures::{task, Async, Future, Poll};
@@ -17,12 +18,7 @@ pub struct FollowMonitor {
     user_id: String,
     conn: SqliteConnection,
     snapshot: Option<FollowSnapshot>,
-    follow_future: Option<
-        Box<
-            dyn Future<Item = (HashMap<String, String>, HashMap<String, String>), Error = ()>
-                + Send,
-        >,
-    >,
+    follow_future: Option<FutureBox<(HashMap<String, String>, HashMap<String, String>)>>,
     sleep_future: Option<tokio_timer::Delay>,
 }
 

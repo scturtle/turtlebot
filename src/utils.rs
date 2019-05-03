@@ -2,6 +2,8 @@ use diesel::prelude::{Connection, SqliteConnection};
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 
+pub type FutureBox<T> = Box<dyn futures::Future<Item = T, Error = ()> + Send>;
+
 lazy_static! {
     static ref SEND_QUEUE: Mutex<std::collections::VecDeque<(String, String)>> =
         Mutex::new(Default::default());

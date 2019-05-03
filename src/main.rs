@@ -18,7 +18,7 @@ fn main() {
     dotenv::dotenv().ok();
     env_logger::init();
     info!("start");
-    let tasks: Vec<Box<dyn Future<Item = (), Error = ()> + Send>> = vec![
+    let tasks: Vec<utils::FutureBox<()>> = vec![
         Box::new(telegram::Telegram::new().into_future()),
         Box::new(follow_monitor::FollowMonitor::new().into_future()),
     ];

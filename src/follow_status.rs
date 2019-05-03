@@ -3,13 +3,14 @@ use log::{error, info};
 use serde_json::Value;
 use std::collections::HashMap;
 use crate::twitter::Twitter;
+use crate::utils::FutureBox;
 
 pub struct FollowStatus {
     twitter: Twitter,
     url: reqwest::Url,
     cursor: i64,
     results: HashMap<String, String>,
-    future: Option<Box<dyn Future<Item = Value, Error = ()> + Send>>,
+    future: Option<FutureBox<Value>>,
 }
 
 impl FollowStatus {
@@ -32,7 +33,7 @@ impl FollowStatus {
         }
     }
 
-    fn get(&self) -> Box<dyn Future<Item = Value, Error = ()> + Send> {
+    fn get(&self) -> FutureBox<Value> {
         let mut url = self.url.clone();
         url.query_pairs_mut()
             .append_pair("cursor", &self.cursor.to_string());

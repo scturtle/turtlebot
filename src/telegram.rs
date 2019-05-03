@@ -1,5 +1,5 @@
 use crate::dispatcher::Dispatcher;
-use crate::utils::to_send;
+use crate::utils::{to_send, FutureBox};
 use futures::{task, Async, Future, Poll};
 use log::{error, info};
 use serde_json::{json, Value};
@@ -10,8 +10,8 @@ pub struct Telegram {
     dispatcher: Dispatcher,
     master: String,
     offset: i64,
-    get_future: Option<Box<dyn Future<Item = Value, Error = ()> + Send>>,
-    send_future: Option<Box<dyn Future<Item = (), Error = ()> + Send>>,
+    get_future: Option<FutureBox<Value>>,
+    send_future: Option<FutureBox<()>>,
 }
 
 impl Telegram {
@@ -34,7 +34,7 @@ impl Telegram {
         }
     }
 
-    fn get(&self) -> Box<dyn Future<Item = Value, Error = ()> + Send> {
+    fn get(&self) -> FutureBox<Value> {
         Box::new(
             self.client
                 .post(self.prefix.join("getUpdates").unwrap())
@@ -46,7 +46,7 @@ impl Telegram {
         )
     }
 
-    fn send(&self, id: &str, msg: &str) -> Box<dyn Future<Item = (), Error = ()> + Send> {
+    fn send(&self, id: &str, msg: &str) -> FutureBox<()> {
         Box::new(
             self.client
                 .post(self.prefix.join("sendMessage").unwrap())
