@@ -32,4 +32,3 @@ impl Twitter {
         Twitter { client }
     }
 }
-

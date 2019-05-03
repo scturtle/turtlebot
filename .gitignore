@@ -2,3 +2,4 @@
 **/*.rs.bk
 /secret.json
 /data.db
+.env

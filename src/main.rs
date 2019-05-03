@@ -1,4 +1,5 @@
 #![feature(rustc_private)]
+#![feature(await_macro, async_await)]
 
 mod dispatcher;
 mod follow_monitor;
@@ -11,16 +12,16 @@ mod utils;
 
 #[macro_use]
 extern crate diesel;
-use futures::future::{join_all, Future, IntoFuture};
+#[macro_use]
+extern crate tokio; // use tokio::await;
 use log::info;
 
 fn main() {
     dotenv::dotenv().ok();
     env_logger::init();
     info!("start");
-    let tasks: Vec<utils::FutureBox<()>> = vec![
-        Box::new(telegram::Telegram::new().into_future()),
-        Box::new(follow_monitor::FollowMonitor::new().into_future()),
-    ];
-    tokio::run(join_all(tasks).map(|_| ()));
+    tokio::run_async(async {
+        tokio::spawn_async(follow_monitor::follow_monitor_loop());
+        await!(telegram::telegram_loop());
+    });
 }

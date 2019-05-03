@@ -1,9 +1,7 @@
 use crate::follow_status::FollowStatus;
 use crate::models::FollowLog;
-use crate::utils::FutureBox;
+use crate::utils::sleep;
 use diesel::prelude::*;
-use futures::future::IntoFuture;
-use futures::{task, Async, Future, Poll};
 use log::{error, info};
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -14,16 +12,15 @@ struct FollowSnapshot {
     followers: HashMap<String, String>,
 }
 
-pub struct FollowMonitor {
+struct FollowMonitor {
     user_id: String,
     conn: SqliteConnection,
     snapshot: Option<FollowSnapshot>,
-    follow_future: Option<FutureBox<(HashMap<String, String>, HashMap<String, String>)>>,
-    sleep_future: Option<tokio_timer::Delay>,
+    interval: u64,
 }
 
 impl FollowMonitor {
-    pub fn new() -> Self {
+    fn new() -> Self {
         use crate::schema::follow_log::dsl::*;
         let conn = crate::utils::establish_connection();
         let mut snapshot = None;
@@ -38,8 +35,7 @@ impl FollowMonitor {
             user_id: std::env::var("TWITTER_USER_ID").unwrap(),
             conn: conn,
             snapshot: snapshot,
-            follow_future: None,
-            sleep_future: None,
+            interval: std::env::var("FOLLOW_INTERVAL").unwrap().parse().unwrap(),
         }
     }
 
@@ -119,43 +115,20 @@ impl FollowMonitor {
     }
 }
 
-impl Future for FollowMonitor {
-    type Item = ();
-    type Error = ();
-
-    fn poll(&mut self) -> Poll<(), ()> {
-        if let Some(sleep) = &mut self.sleep_future {
-            match sleep.poll() {
-                Ok(Async::NotReady) => return Ok(Async::NotReady),
-                _ => {},
+pub async fn follow_monitor_loop() {
+    let mut fm = FollowMonitor::new();
+    loop {
+        info!("fetching follow status");
+        let mut following_future = FollowStatus::new(&fm.user_id, false);
+        let following = await!(following_future.fetch());
+        let mut followers_future = FollowStatus::new(&fm.user_id, true);
+        let followers = await!(followers_future.fetch());
+        match (following, followers) {
+            (Some(following), Some(followers)) => {
+                fm.process(following, followers);
+                await!(sleep(fm.interval));
             }
-            self.sleep_future = None;
+            _ => info!("fetch follow status failed"),
         }
-
-        match &mut self.follow_future {
-            Some(follow) => {
-                let (following, followers) = match follow.poll() {
-                    Ok(Async::Ready(res)) => res,
-                    Ok(Async::NotReady) => return Ok(Async::NotReady),
-                    Err(_) => {
-                        self.follow_future = None;
-                        task::current().notify();
-                        return Ok(Async::NotReady)
-                    }
-                };
-                self.follow_future = None;
-                self.process(following, followers);
-                self.sleep_future = Some(tokio_timer::sleep(std::time::Duration::from_secs(60)));
-            }
-            _ => {
-                info!("fetching follow status");
-                let following = FollowStatus::new(&self.user_id, false).into_future();
-                let followers = FollowStatus::new(&self.user_id, true).into_future();
-                self.follow_future = Some(Box::new(following.join(followers)));
-            }
-        }
-
-        task::current().notify();
-        Ok(Async::NotReady)
     }
 }

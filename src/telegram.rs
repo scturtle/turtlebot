@@ -1,22 +1,22 @@
 use crate::dispatcher::Dispatcher;
-use crate::utils::{to_send, FutureBox};
-use futures::{task, Async, Future, Poll};
+use crate::utils::to_send;
+use futures::future::Future as OldFuture;
 use log::{error, info};
 use serde_json::{json, Value};
+use std::future::Future;
+use tokio_async_await::compat::forward::IntoAwaitable;
 
-pub struct Telegram {
+struct Telegram {
     prefix: reqwest::Url,
     client: reqwest::r#async::Client,
     dispatcher: Dispatcher,
     master: String,
     offset: i64,
-    get_future: Option<FutureBox<Value>>,
-    send_future: Option<FutureBox<()>>,
 }
 
 impl Telegram {
-    pub fn new() -> Self {
-        let master = std::env::var("MASTER").unwrap();
+    fn new() -> Self {
+        let master = std::env::var("MASTER_ID").unwrap();
         let tg_key = std::env::var("TG_KEY").unwrap();
         let url = "https://api.telegram.org/bot".to_owned() + &tg_key + "/";
         Self {
@@ -29,86 +29,37 @@ impl Telegram {
             dispatcher: Dispatcher::new(),
             master: master,
             offset: 0,
-            get_future: None,
-            send_future: None,
         }
     }
 
-    fn get(&self) -> FutureBox<Value> {
-        Box::new(
-            self.client
-                .post(self.prefix.join("getUpdates").unwrap())
-                .json(&json!({"offset": self.offset, "timeout": 60}))
-                .send()
-                .and_then(|mut v| v.json::<Value>())
-                // .map(|v| { info!("{}", v); v })
-                .map_err(|e| error!("poll error: {}", e)),
-        )
+    fn get(&self) -> impl Future<Output = Result<Value, ()>> {
+        self.client
+            .post(self.prefix.join("getUpdates").unwrap())
+            .json(&json!({"offset": self.offset, "timeout": 60}))
+            .send()
+            .and_then(|mut v| v.json::<Value>())
+            .map_err(|e| error!("poll error: {}", e))
+            .into_awaitable()
     }
 
-    fn send(&self, id: &str, msg: &str) -> FutureBox<()> {
-        Box::new(
-            self.client
-                .post(self.prefix.join("sendMessage").unwrap())
-                .json(
-                    &json!({"chat_id": id, "text": msg, "parse_mode": "Markdown",
+    fn send(&self, id: String, msg: String) -> impl Future<Output = Result<(), ()>> {
+        self.client
+            .post(self.prefix.join("sendMessage").unwrap())
+            .json(
+                &json!({"chat_id": &id, "text": &msg, "parse_mode": "Markdown",
                           "disable_web_page_preview": true}),
-                )
-                .send()
-                .and_then(|mut v| v.json::<Value>())
-                .map(|resp| match resp["ok"] {
-                    Value::Bool(true) => {}
-                    _ => error!("send error: {}", resp.to_string()),
-                })
-                .map_err(|e| error!("poll error: {}", e)),
-        )
+            )
+            .send()
+            .and_then(|mut v| v.json::<Value>())
+            .map(|resp| match resp["ok"] {
+                Value::Bool(true) => {}
+                _ => error!("send error: {}", resp.to_string()),
+            })
+            .map_err(|e| error!("poll error: {}", e))
+            .into_awaitable()
     }
-}
 
-impl Future for Telegram {
-    type Item = ();
-    type Error = ();
-
-    fn poll(&mut self) -> Poll<(), ()> {
-        match &mut self.send_future {
-            None => {
-                if let Some((id, msg)) = to_send() {
-                    self.send_future = Some(self.send(&id, &msg));
-                    task::current().notify();
-                    return Ok(Async::NotReady);
-                }
-            }
-            Some(send) => {
-                match send.poll() {
-                    Ok(Async::Ready(_)) => {}
-                    Ok(Async::NotReady) => return Ok(Async::NotReady),
-                    Err(_) => error!("send error"),
-                }
-                self.send_future = None;
-            }
-        }
-
-        let j: Value = match &mut self.get_future {
-            None => {
-                self.get_future = Some(self.get());
-                task::current().notify();
-                return Ok(Async::NotReady);
-            }
-            Some(get) => match get.poll() {
-                Ok(Async::Ready(j)) => {
-                    self.get_future = None;
-                    j
-                }
-                Ok(Async::NotReady) => return Ok(Async::NotReady),
-                Err(_) => {
-                    self.get_future = None;
-                    error!("send error");
-                    task::current().notify();
-                    return Ok(Async::NotReady);
-                }
-            },
-        };
-
+    fn process(&mut self, j: Value) {
         if Value::Bool(true) != j["ok"] {
             error!("polling error: {:?}", j["description"]);
         } else {
@@ -138,8 +89,17 @@ impl Future for Telegram {
                 }
             }
         }
+    }
+}
 
-        task::current().notify();
-        Ok(Async::NotReady)
+pub async fn telegram_loop() {
+    let mut tg = Telegram::new();
+    loop {
+        if let Some((id, msg)) = to_send() {
+            let _ = await!(tg.send(id, msg));
+        }
+        if let Ok(j) = await!(tg.get()) {
+            tg.process(j);
+        }
     }
 }
