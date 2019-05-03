@@ -5,6 +5,7 @@ mod dispatcher;
 mod follow_monitor;
 mod follow_status;
 mod models;
+mod rss;
 mod schema;
 mod telegram;
 mod twitter;
@@ -22,6 +23,7 @@ fn main() {
     info!("start");
     tokio::run_async(async {
         tokio::spawn_async(follow_monitor::follow_monitor_loop());
+        tokio::spawn_async(rss::rss_monitor_loop());
         await!(telegram::telegram_loop());
     });
 }

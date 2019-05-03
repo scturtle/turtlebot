@@ -1,6 +1,6 @@
 use crate::follow_status::FollowStatus;
 use crate::models::FollowLog;
-use crate::utils::sleep;
+use crate::utils::{establish_connection, sleep};
 use diesel::prelude::*;
 use log::{error, info};
 use serde_derive::{Deserialize, Serialize};
@@ -14,7 +14,6 @@ struct FollowSnapshot {
 
 struct FollowMonitor {
     user_id: String,
-    conn: SqliteConnection,
     snapshot: Option<FollowSnapshot>,
     interval: u64,
 }
@@ -22,7 +21,7 @@ struct FollowMonitor {
 impl FollowMonitor {
     fn new() -> Self {
         use crate::schema::follow_log::dsl::*;
-        let conn = crate::utils::establish_connection();
+        let conn = establish_connection();
         let mut snapshot = None;
         if let Ok(log) = follow_log
             .filter(action.eq("meta"))
@@ -33,7 +32,6 @@ impl FollowMonitor {
         }
         Self {
             user_id: std::env::var("TWITTER_USER_ID").unwrap(),
-            conn: conn,
             snapshot: snapshot,
             interval: std::env::var("FOLLOW_INTERVAL").unwrap().parse().unwrap(),
         }
@@ -52,6 +50,7 @@ impl FollowMonitor {
         new_followers: HashMap<String, String>,
     ) {
         use crate::schema::follow_log::dsl::*;
+        let conn = establish_connection();
         match &self.snapshot {
             Some(snapshot) => {
                 let FollowSnapshot {
@@ -67,25 +66,25 @@ impl FollowMonitor {
                     info!("unfo {}", following[uid]);
                     let _ = diesel::insert_into(follow_log)
                         .values((name.eq(&following[uid]), action.eq("unfo")))
-                        .execute(&self.conn);
+                        .execute(&conn);
                 }
                 for uid in fo_ids {
                     info!("fo {}", new_following[uid]);
                     let _ = diesel::insert_into(follow_log)
                         .values((name.eq(&new_following[uid]), action.eq("fo")))
-                        .execute(&self.conn);
+                        .execute(&conn);
                 }
                 for uid in unfoed_ids {
                     info!("unfoed {}", followers[uid]);
                     let _ = diesel::insert_into(follow_log)
                         .values((name.eq(&followers[uid]), action.eq("unfoed")))
-                        .execute(&self.conn);
+                        .execute(&conn);
                 }
                 for uid in foed_ids {
                     info!("foed {}", new_followers[uid]);
                     let _ = diesel::insert_into(follow_log)
                         .values((name.eq(&new_followers[uid]), action.eq("foed")))
-                        .execute(&self.conn);
+                        .execute(&conn);
                 }
             }
             None => {}
@@ -97,17 +96,17 @@ impl FollowMonitor {
         let snapshot_str = serde_json::to_string(self.snapshot.as_ref().unwrap()).unwrap();
         match &mut follow_log
             .filter(action.eq("meta"))
-            .first::<FollowLog>(&self.conn)
+            .first::<FollowLog>(&conn)
             .optional()
         {
             Ok(Some(log)) => {
                 log.name = snapshot_str;
-                let _ = log.save_changes::<FollowLog>(&self.conn);
+                let _ = log.save_changes::<FollowLog>(&conn);
             }
             Ok(None) => {
                 let _ = diesel::insert_into(follow_log)
                     .values((name.eq(&snapshot_str), action.eq("meta")))
-                    .execute(&self.conn);
+                    .execute(&conn);
             }
             Err(e) => error!("{}", e),
         }
