@@ -46,7 +46,8 @@ pub fn unsub(id_to_del: i32) -> String {
             error!("{}", e);
             "error"
         }
-    }.into()
+    }
+    .into()
 }
 
 pub fn list() -> String {
@@ -124,25 +125,26 @@ pub async fn rss_monitor_loop() {
                 .send()
                 .and_then(|t| t.into_body().concat2())
                 .into_awaitable());
-            match resp {
-                Err(e) => error!("{}", e),
-                Ok(body) => {
-                    let text = std::str::from_utf8(&body).unwrap_or_default();
-                    match parse_rss_or_atom(text) {
-                        None => error!("failed to parse {}", r.url),
-                        Some((_, newest_title, newest_url)) => {
-                            if let Ok(mut t) = rss.filter(url.eq(&r.url)).first::<Rss>(&conn) {
-                                if t.latest_url != newest_url && t.latest_title != newest_title {
-                                    info!("new post [{}]({})", newest_title, newest_url);
-                                    send(&cid, &format!("[{}]({})", newest_title, newest_url));
-                                    t.latest_url = newest_url;
-                                    t.latest_title = newest_title;
-                                    let _ = t.save_changes::<Rss>(&conn);
-                                    error!("updated {}", r.url);
-                                }
-                            }
-                        }
-                    }
+            if let Err(e) = resp {
+                error!("{}", e);
+                continue;
+            }
+            let body = resp.unwrap();
+            let text = std::str::from_utf8(&body).unwrap_or_default();
+            let triple = parse_rss_or_atom(text);
+            if triple.is_none() {
+                error!("failed to parse {}", r.url);
+                continue;
+            }
+            let (_, newest_title, newest_url) = triple.unwrap();
+            if let Ok(mut t) = rss.filter(url.eq(&r.url)).first::<Rss>(&conn) {
+                if t.latest_url != newest_url && t.latest_title != newest_title {
+                    info!("new post [{}]({})", newest_title, newest_url);
+                    send(&cid, &format!("[{}]({})", newest_title, newest_url));
+                    t.latest_url = newest_url;
+                    t.latest_title = newest_title;
+                    let _ = t.save_changes::<Rss>(&conn);
+                    error!("updated {}", r.url);
                 }
             }
         }
