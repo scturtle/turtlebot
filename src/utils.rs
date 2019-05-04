@@ -39,3 +39,15 @@ pub async fn sleep(n: u64) {
     ))
     .unwrap();
 }
+
+pub fn get_async_client() -> reqwest::r#async::Client {
+    let proxy = std::env::var("PROXY").unwrap_or_default();
+    let mut builder = reqwest::r#async::ClientBuilder::new();
+    if !proxy.is_empty() {
+        builder = builder.proxy(reqwest::Proxy::all(&proxy).unwrap());
+    }
+    builder
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .unwrap()
+}

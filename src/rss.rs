@@ -1,5 +1,5 @@
 use crate::models::Rss;
-use crate::utils::{establish_connection, send, sleep};
+use crate::utils::{establish_connection, get_async_client, send, sleep};
 use diesel::prelude::*;
 use futures::future::Future;
 use futures::stream::Stream;
@@ -40,13 +40,13 @@ pub fn unsub(id_to_del: i32) -> String {
     use crate::schema::rss::dsl::*;
     let conn = establish_connection();
     match diesel::delete(rss.filter(id.eq(id_to_del))).execute(&conn) {
-        Ok(n) if n > 0 => return "done".into(),
-        Ok(_) => return "not found".into(),
+        Ok(n) if n > 0 => "done",
+        Ok(_) => "not found",
         Err(e) => {
             error!("{}", e);
-            return "error".into();
+            "error"
         }
-    }
+    }.into()
 }
 
 pub fn list() -> String {
@@ -104,14 +104,10 @@ fn parse_rss_or_atom(text: &str) -> Option<(String, String, String)> {
 
 pub async fn rss_monitor_loop() {
     use crate::schema::rss::dsl::*;
-    let conn = establish_connection();
-    let client = reqwest::r#async::ClientBuilder::new()
-        .proxy(reqwest::Proxy::all("http://localhost:1087").unwrap())
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .unwrap();
     let cid = std::env::var("MASTER_ID").unwrap();
     let interval = std::env::var("FOLLOW_INTERVAL").unwrap().parse().unwrap();
+    let client = get_async_client();
+    let conn = establish_connection();
     loop {
         let rs = rss
             .order(id.asc())

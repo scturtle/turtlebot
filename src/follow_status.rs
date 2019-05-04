@@ -25,7 +25,7 @@ impl FollowStatus {
             .append_pair("count", "200");
         Self {
             twitter: Twitter::new(),
-            url: url,
+            url,
             cursor: -1,
         }
     }

@@ -32,7 +32,7 @@ impl FollowMonitor {
         }
         Self {
             user_id: std::env::var("TWITTER_USER_ID").unwrap(),
-            snapshot: snapshot,
+            snapshot,
             interval: std::env::var("FOLLOW_INTERVAL").unwrap().parse().unwrap(),
         }
     }

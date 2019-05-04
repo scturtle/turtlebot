@@ -1,5 +1,5 @@
 use crate::dispatcher::Dispatcher;
-use crate::utils::to_send;
+use crate::utils::{get_async_client, to_send};
 use futures::future::Future as OldFuture;
 use log::{error, info};
 use serde_json::{json, Value};
@@ -21,13 +21,9 @@ impl Telegram {
         let url = "https://api.telegram.org/bot".to_owned() + &tg_key + "/";
         Self {
             prefix: reqwest::Url::parse(&url).unwrap(),
-            client: reqwest::r#async::ClientBuilder::new()
-                .proxy(reqwest::Proxy::all("http://localhost:1087").unwrap())
-                .timeout(std::time::Duration::from_secs(60))
-                .build()
-                .unwrap(),
+            client: get_async_client(),
             dispatcher: Dispatcher::new(),
-            master: master,
+            master,
             offset: 0,
         }
     }
@@ -55,7 +51,7 @@ impl Telegram {
                 Value::Bool(true) => {}
                 _ => error!("send error: {}", resp.to_string()),
             })
-            .map_err(|e| error!("poll error: {}", e))
+            .map_err(|e| error!("send error: {}", e))
             .into_awaitable()
     }
 
