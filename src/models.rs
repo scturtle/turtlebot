@@ -14,8 +14,9 @@ pub struct FollowLog {
 #[table_name = "rss"]
 pub struct Rss {
     pub id: i32,
-    pub url: String,
+    pub home: String,
     pub title: String,
+    pub feed: String,
     pub latest_title: String,
-    pub latest_url: String,
+    pub latest_link: String,
 }

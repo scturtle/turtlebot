@@ -1,6 +1,7 @@
 use crate::models::Rss;
 use crate::utils::{establish_connection, get_async_client, send, sleep};
 use diesel::prelude::*;
+use feedfinder::detect_feeds;
 use futures::future::Future;
 use futures::stream::Stream;
 use log::{error, info};
@@ -10,30 +11,48 @@ use std::str::FromStr;
 pub fn sub(url_str: &str) -> String {
     use crate::schema::rss::dsl::*;
     // FIXME: blocking
-    match &mut reqwest::get(url_str) {
-        Err(_) => {
-            return format!("cannot access {}", url_str);
-        }
-        Ok(resp) => {
-            let text = resp.text().unwrap_or_default();
-            let (title_str, latest_title_str, latest_url_str) =
-                if let Some(triple) = parse_rss_or_atom(&text) {
-                    triple
-                } else {
-                    return format!("cannot parse {}", url_str);
-                };
-            let conn = establish_connection();
-            let _ = diesel::insert_into(rss)
-                .values((
-                    url.eq(url_str),
-                    title.eq(&title_str),
-                    latest_title.eq(latest_title_str),
-                    latest_url.eq(latest_url_str),
-                ))
-                .execute(&conn);
-            return format!("subcribed \"{}\"", title_str);
-        }
-    }
+    let url = match url::Url::parse(url_str) {
+        Ok(url) => url,
+        _ => return "not url".into(),
+    };
+    let text = match reqwest::get(url.clone()) {
+        Ok(mut resp) => resp.text().unwrap_or_default(),
+        _ => return format!("cannot access {}", url_str),
+    };
+    let (feed_str, (title_str, latest_title_str, latest_link_str)) = match parse_rss_or_atom(&text)
+    {
+        Some(triple) => (url_str.into(), triple),
+        None => match detect_feeds(&url, &text)
+            .ok()
+            .and_then(|feeds| feeds.get(0).map(|f| f.url().clone()))
+        {
+            None => return format!("no feed found in {}", url_str),
+            Some(feed_url) => {
+                let feed_str = feed_url.to_string();
+                match reqwest::get(feed_url) {
+                    Err(_) => return format!("cannot access {}", feed_str),
+                    Ok(mut resp) => {
+                        let feed_text = resp.text().unwrap_or_default();
+                        match parse_rss_or_atom(&feed_text) {
+                            None => return format!("cannot parse {}", feed_str),
+                            Some(triple) => (feed_str, triple),
+                        }
+                    }
+                }
+            }
+        },
+    };
+    let conn = establish_connection();
+    let _ = diesel::insert_into(rss)
+        .values((
+            home.eq(url_str),
+            title.eq(&title_str),
+            feed.eq(feed_str),
+            latest_title.eq(latest_title_str),
+            latest_link.eq(latest_link_str),
+        ))
+        .execute(&conn);
+    return format!("subcribed \"{}\"", title_str);
 }
 
 pub fn unsub(id_to_del: i32) -> String {
@@ -61,7 +80,7 @@ pub fn list() -> String {
             vec![]
         })
         .into_iter()
-        .map(|r| format!("{} [{}]({})", r.id, r.title, r.url))
+        .map(|r| format!("{} [{}]({})", r.id, r.title, r.home))
         .collect::<Vec<_>>()
         .join("\n");
     if s.is_empty() {
@@ -118,8 +137,8 @@ pub async fn rss_monitor_loop() {
                 vec![]
             });
         for r in rs {
-            info!("fetch {}", r.url);
-            let url_to_get = reqwest::Url::parse(&r.url).unwrap();
+            info!("fetch {}", r.feed);
+            let url_to_get = reqwest::Url::parse(&r.feed).unwrap();
             let resp = await!(client
                 .get(url_to_get)
                 .send()
@@ -133,18 +152,18 @@ pub async fn rss_monitor_loop() {
             let text = std::str::from_utf8(&body).unwrap_or_default();
             let triple = parse_rss_or_atom(text);
             if triple.is_none() {
-                error!("failed to parse {}", r.url);
+                error!("failed to parse {}", r.feed);
                 continue;
             }
-            let (_, newest_title, newest_url) = triple.unwrap();
-            if let Ok(mut t) = rss.filter(url.eq(&r.url)).first::<Rss>(&conn) {
-                if t.latest_url != newest_url && t.latest_title != newest_title {
-                    info!("new post [{}]({})", newest_title, newest_url);
-                    send(&cid, &format!("[{}]({})", newest_title, newest_url));
-                    t.latest_url = newest_url;
+            let (_, newest_title, newest_link) = triple.unwrap();
+            if let Ok(mut t) = rss.filter(feed.eq(&r.feed)).first::<Rss>(&conn) {
+                if t.latest_link != newest_link && t.latest_title != newest_title {
+                    info!("new post [{}]({})", newest_title, newest_link);
+                    send(&cid, &format!("[{}]({})", newest_title, newest_link));
+                    t.latest_link = newest_link;
                     t.latest_title = newest_title;
                     let _ = t.save_changes::<Rss>(&conn);
-                    error!("updated {}", r.url);
+                    error!("updated {}", r.feed);
                 }
             }
         }

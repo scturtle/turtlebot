@@ -10,10 +10,11 @@ table! {
 table! {
     rss (id) {
         id -> Integer,
-        url -> Text,
+        home -> Text,
         title -> Text,
+        feed -> Text,
         latest_title -> Text,
-        latest_url -> Text,
+        latest_link -> Text,
     }
 }
 
