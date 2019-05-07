@@ -1,4 +1,4 @@
-use crate::utils::get_async_client;
+use crate::utils::get_async_client_with_headers;
 use reqwest::header::{self, HeaderMap, HeaderName};
 use serde_json::Value;
 
@@ -23,7 +23,7 @@ impl Twitter {
             header::COOKIE,
             val["cookie"].as_str().unwrap().parse().unwrap(),
         );
-        let client = get_async_client();
+        let client = get_async_client_with_headers(headers);
         Twitter { client }
     }
 }
