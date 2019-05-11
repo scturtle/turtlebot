@@ -19,9 +19,15 @@ pub fn sub(url_str: &str) -> String {
         Ok(mut resp) => resp.text().unwrap_or_default(),
         _ => return format!("cannot access {}", url_str),
     };
-    let (feed_str, (title_str, latest_title_str, latest_link_str)) = match parse_rss_or_atom(&text)
+    let (feed_str, title_str, (latest_title_str, latest_link_str)) = match parse_rss_or_atom(&text)
     {
-        Some(triple) => (url_str.into(), triple),
+        // if is feed link already
+        Some((title_str, articles)) => (
+            url_str.into(),
+            title_str,
+            articles.first().cloned().unwrap_or_default(),
+        ),
+        // search feed link in it
         None => match detect_feeds(&url, &text)
             .ok()
             .and_then(|feeds| feeds.get(0).map(|f| f.url().clone()))
@@ -35,7 +41,11 @@ pub fn sub(url_str: &str) -> String {
                         let feed_text = resp.text().unwrap_or_default();
                         match parse_rss_or_atom(&feed_text) {
                             None => return format!("cannot parse {}", feed_str),
-                            Some(triple) => (feed_str, triple),
+                            Some((title_str, articles)) => (
+                                feed_str,
+                                title_str,
+                                articles.first().cloned().unwrap_or_default(),
+                            ),
                         }
                     }
                 }
@@ -90,33 +100,37 @@ pub fn list() -> String {
     }
 }
 
-fn parse_rss_or_atom(text: &str) -> Option<(String, String, String)> {
+fn parse_rss_or_atom(text: &str) -> Option<(String, Vec<(String, String)>)> {
     if let Ok(ch) = Channel::from_str(&text) {
         let title_str = ch.title().to_owned();
-        if let Some(item) = ch.items().first() {
-            Some((
-                title_str,
-                item.title().map(String::from).unwrap_or_default(),
-                item.link().map(String::from).unwrap_or_default(),
-            ))
-        } else {
-            Some((title_str, String::new(), String::new()))
-        }
+        let articles = ch
+            .items()
+            .iter()
+            .map(|item| {
+                (
+                    item.title().map(String::from).unwrap_or_default(),
+                    item.link().map(String::from).unwrap_or_default(),
+                )
+            })
+            .collect();
+        Some((title_str, articles))
     } else if let Ok(feed) = atom_syndication::Feed::from_str(&text) {
         let title_str = feed.title().to_owned();
-        if let Some(entry) = feed.entries().first() {
-            Some((
-                title_str,
-                entry.title().into(),
-                entry
-                    .links()
-                    .first()
-                    .map(|l| l.href().into())
-                    .unwrap_or_default(),
-            ))
-        } else {
-            Some((title_str, String::new(), String::new()))
-        }
+        let articles = feed
+            .entries()
+            .iter()
+            .map(|entry| {
+                (
+                    entry.title().into(),
+                    entry
+                        .links()
+                        .first()
+                        .map(|l| l.href().into())
+                        .unwrap_or_default(),
+                )
+            })
+            .collect();
+        Some((title_str, articles))
     } else {
         None
     }
@@ -150,20 +164,30 @@ pub async fn rss_monitor_loop() {
             }
             let body = resp.unwrap();
             let text = std::str::from_utf8(&body).unwrap_or_default();
-            let triple = parse_rss_or_atom(text);
-            if triple.is_none() {
+            let result = parse_rss_or_atom(text);
+            if result.is_none() {
                 error!("failed to parse {}", r.feed);
                 continue;
             }
-            let (_, newest_title, newest_link) = triple.unwrap();
+            let (_, articles) = result.unwrap();
             if let Ok(mut t) = rss.filter(feed.eq(&r.feed)).first::<Rss>(&conn) {
-                if t.latest_link != newest_link && t.latest_title != newest_title {
-                    info!("new post [{}]({})", newest_title, newest_link);
-                    send(&cid, &format!("[{}]({})", newest_title, newest_link));
-                    t.latest_link = newest_link;
-                    t.latest_title = newest_title;
-                    let _ = t.save_changes::<Rss>(&conn);
-                    error!("updated {}", r.feed);
+                let cnt = articles
+                    .iter()
+                    .position(|(a, b)| (a, b) == (&t.latest_title, &t.latest_link))
+                    .unwrap_or(1);
+                let mut msg = String::new();
+                for (new_title, new_link) in articles.iter().take(cnt) {
+                    // update with the first one
+                    if msg.is_empty() {
+                        t.latest_link = new_link.clone();
+                        t.latest_title = new_title.clone();
+                        let _ = t.save_changes::<Rss>(&conn);
+                    }
+                    info!("new post [{}]({})", new_title, new_link);
+                    msg.push_str(&format!("\n[{}]({})", new_title, new_link));
+                }
+                if !msg.is_empty() {
+                    send(&cid, &msg[1..]);
                 }
             }
         }

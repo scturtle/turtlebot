@@ -1,6 +1,6 @@
 use diesel::prelude::{Connection, SqliteConnection};
-use reqwest::header::HeaderMap;
 use lazy_static::lazy_static;
+use reqwest::header::HeaderMap;
 use std::sync::Mutex;
 
 lazy_static! {
@@ -40,7 +40,6 @@ pub async fn sleep(n: u64) {
     ))
     .unwrap();
 }
-
 
 pub fn get_async_client() -> reqwest::r#async::Client {
     get_async_client_with_headers(Default::default())
