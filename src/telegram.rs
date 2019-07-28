@@ -1,10 +1,9 @@
 use crate::dispatcher::Dispatcher;
 use crate::utils::{get_async_client, to_send};
-use futures::future::Future as OldFuture;
+use futures::compat::Future01CompatExt;
 use log::{error, info};
 use serde_json::{json, Value};
-use std::future::Future;
-use tokio_async_await::compat::forward::IntoAwaitable;
+use tokio::prelude::Future;
 
 struct Telegram {
     prefix: reqwest::Url,
@@ -28,17 +27,18 @@ impl Telegram {
         }
     }
 
-    fn get(&self) -> impl Future<Output = Result<Value, ()>> {
+    async fn get(&self) -> Result<Value, ()> {
         self.client
             .post(self.prefix.join("getUpdates").unwrap())
             .json(&json!({"offset": self.offset, "timeout": 60}))
             .send()
             .and_then(|mut v| v.json::<Value>())
             .map_err(|e| error!("poll error: {}", e))
-            .into_awaitable()
+            .compat()
+            .await
     }
 
-    fn send(&self, id: String, msg: String) -> impl Future<Output = Result<(), ()>> {
+    async fn send(&self, id: String, msg: String) -> Result<(), ()> {
         self.client
             .post(self.prefix.join("sendMessage").unwrap())
             .json(
@@ -52,7 +52,8 @@ impl Telegram {
                 _ => error!("send error: {}", resp.to_string()),
             })
             .map_err(|e| error!("send error: {}", e))
-            .into_awaitable()
+            .compat()
+            .await
     }
 
     fn process(&mut self, j: Value) {

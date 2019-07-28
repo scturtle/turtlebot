@@ -2,11 +2,11 @@ use crate::models::Rss;
 use crate::utils::{establish_connection, get_async_client, send, sleep};
 use diesel::prelude::*;
 use feedfinder::detect_feeds;
-use futures::future::Future;
-use futures::stream::Stream;
+use futures::compat::Future01CompatExt;
 use log::{error, info};
 use rss::Channel;
 use std::str::FromStr;
+use tokio::prelude::{Future, Stream};
 
 pub fn sub(url_str: &str) -> String {
     use crate::schema::rss::dsl::*;
@@ -153,11 +153,12 @@ pub async fn rss_monitor_loop() {
         for r in rs {
             info!("fetch {}", r.feed);
             let url_to_get = reqwest::Url::parse(&r.feed).unwrap();
-            let resp = await!(client
+            let resp = client
                 .get(url_to_get)
                 .send()
                 .and_then(|t| t.into_body().concat2())
-                .into_awaitable());
+                .compat()
+                .await;
             if let Err(e) = resp {
                 error!("{}", e);
                 continue;

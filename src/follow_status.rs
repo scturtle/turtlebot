@@ -1,10 +1,9 @@
 use crate::twitter::Twitter;
-use futures::future::Future as OldFuture;
+use futures::compat::Future01CompatExt;
 use log::{error, info};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::future::Future;
-use tokio_async_await::compat::forward::IntoAwaitable;
+use tokio::prelude::Future;
 
 pub struct FollowStatus {
     twitter: Twitter,
@@ -30,7 +29,7 @@ impl FollowStatus {
         }
     }
 
-    fn get(&self) -> impl Future<Output = Result<Value, ()>> {
+    async fn get(&self) -> Result<Value, ()> {
         let mut url = self.url.clone();
         url.query_pairs_mut()
             .append_pair("cursor", &self.cursor.to_string());
@@ -40,7 +39,8 @@ impl FollowStatus {
             .send()
             .and_then(|mut v| v.json::<Value>())
             .map_err(|e| info!("twitter error: {}", e))
-            .into_awaitable()
+            .compat()
+            .await
     }
 
     pub async fn fetch(&mut self) -> Option<HashMap<String, String>> {

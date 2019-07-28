@@ -1,4 +1,5 @@
 use diesel::prelude::{Connection, SqliteConnection};
+use futures::compat::Future01CompatExt;
 use lazy_static::lazy_static;
 use reqwest::header::HeaderMap;
 use std::sync::Mutex;
@@ -35,10 +36,10 @@ pub fn format_time(time: &chrono::NaiveDateTime) -> String {
 
 pub async fn sleep(n: u64) {
     use std::time::{Duration, Instant};
-    await!(tokio::timer::Delay::new(
-        Instant::now() + Duration::from_secs(n)
-    ))
-    .unwrap();
+    tokio::timer::Delay::new(Instant::now() + Duration::from_secs(n))
+        .compat()
+        .await
+        .unwrap();
 }
 
 pub fn get_async_client() -> reqwest::r#async::Client {

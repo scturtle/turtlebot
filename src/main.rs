@@ -13,17 +13,23 @@ mod utils;
 
 #[macro_use]
 extern crate diesel;
-#[macro_use]
-extern crate tokio; // use tokio::await;
+extern crate tokio;
+use futures::{FutureExt, TryFutureExt};
 use log::info;
+
+async fn main_loop() {
+    let fut = follow_monitor::follow_monitor_loop()
+        .boxed()
+        .unit_error()
+        .compat();
+    tokio::spawn(fut);
+    tokio::spawn(rss::rss_monitor_loop().boxed().unit_error().compat());
+    telegram::telegram_loop().await;
+}
 
 fn main() {
     dotenv::dotenv().ok();
     env_logger::init();
     info!("start");
-    tokio::run_async(async {
-        tokio::spawn_async(follow_monitor::follow_monitor_loop());
-        tokio::spawn_async(rss::rss_monitor_loop());
-        await!(telegram::telegram_loop());
-    });
+    tokio::run(main_loop().boxed().unit_error().compat());
 }
