@@ -6,7 +6,8 @@ use futures::compat::Future01CompatExt;
 use log::{error, info};
 use rss::Channel;
 use std::str::FromStr;
-use tokio::prelude::{Future, Stream};
+use futures01::future::Future;
+use futures01::stream::Stream;
 
 pub fn sub(url_str: &str) -> String {
     use crate::schema::rss::dsl::*;
@@ -192,6 +193,6 @@ pub async fn rss_monitor_loop() {
                 }
             }
         }
-        await!(sleep(interval));
+        sleep(interval).await;
     }
 }

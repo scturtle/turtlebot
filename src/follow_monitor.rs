@@ -119,13 +119,13 @@ pub async fn follow_monitor_loop() {
     loop {
         info!("fetching follow status");
         let mut following_future = FollowStatus::new(&fm.user_id, false);
-        let following = await!(following_future.fetch());
+        let following = following_future.fetch().await;
         let mut followers_future = FollowStatus::new(&fm.user_id, true);
-        let followers = await!(followers_future.fetch());
+        let followers = followers_future.fetch().await;
         match (following, followers) {
             (Some(following), Some(followers)) => {
                 fm.process(following, followers);
-                await!(sleep(fm.interval));
+                sleep(fm.interval).await;
             }
             _ => info!("fetch follow status failed"),
         }

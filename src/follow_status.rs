@@ -3,7 +3,7 @@ use futures::compat::Future01CompatExt;
 use log::{error, info};
 use serde_json::Value;
 use std::collections::HashMap;
-use tokio::prelude::Future;
+use futures01::future::Future;
 
 pub struct FollowStatus {
     twitter: Twitter,
@@ -46,7 +46,7 @@ impl FollowStatus {
     pub async fn fetch(&mut self) -> Option<HashMap<String, String>> {
         let mut results: HashMap<String, String> = Default::default();
         loop {
-            match await!(self.get()) {
+            match self.get().await {
                 Err(_) => return None,
                 Ok(j) => {
                     if !j["errors"].is_null() {

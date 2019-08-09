@@ -3,7 +3,7 @@ use crate::utils::{get_async_client, to_send};
 use futures::compat::Future01CompatExt;
 use log::{error, info};
 use serde_json::{json, Value};
-use tokio::prelude::Future;
+use futures01::future::Future;
 
 struct Telegram {
     prefix: reqwest::Url,
@@ -33,7 +33,7 @@ impl Telegram {
             .json(&json!({"offset": self.offset, "timeout": 60}))
             .send()
             .and_then(|mut v| v.json::<Value>())
-            .map_err(|e| error!("poll error: {}", e))
+            .map_err(|e| error!("send error: {}", e))
             .compat()
             .await
     }
@@ -93,9 +93,9 @@ pub async fn telegram_loop() {
     let mut tg = Telegram::new();
     loop {
         if let Some((id, msg)) = to_send() {
-            let _ = await!(tg.send(id, msg));
+            let _ = tg.send(id, msg).await;
         }
-        if let Ok(j) = await!(tg.get()) {
+        if let Ok(j) = tg.get().await {
             tg.process(j);
         }
     }
