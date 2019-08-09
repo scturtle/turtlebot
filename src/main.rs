@@ -16,7 +16,7 @@ extern crate diesel;
 extern crate tokio;
 use log::info;
 
-#[tokio::main]
+#[runtime::main(runtime_tokio::Tokio)]
 async fn main() {
     dotenv::dotenv().ok();
     env_logger::init();
