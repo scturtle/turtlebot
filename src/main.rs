@@ -13,7 +13,6 @@ mod utils;
 
 #[macro_use]
 extern crate diesel;
-extern crate tokio;
 use log::info;
 
 #[runtime::main(runtime_tokio::Tokio)]
@@ -21,7 +20,7 @@ async fn main() {
     dotenv::dotenv().ok();
     env_logger::init();
     info!("start");
-    tokio::spawn(follow_monitor::follow_monitor_loop());
-    tokio::spawn(rss::rss_monitor_loop());
+    let _ = runtime::spawn(follow_monitor::follow_monitor_loop());
+    let _ = runtime::spawn(rss::rss_monitor_loop());
     telegram::telegram_loop().await;
 }

@@ -34,9 +34,7 @@ pub fn format_time(time: &chrono::NaiveDateTime) -> String {
 }
 
 pub async fn sleep(n: u64) {
-    use std::time::{Duration, Instant};
-    tokio::timer::Delay::new(Instant::now() + Duration::from_secs(n))
-        .await;
+    runtime::time::Delay::new(std::time::Duration::from_secs(n)).await;
 }
 
 pub fn get_async_client() -> reqwest::r#async::Client {
