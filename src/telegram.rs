@@ -1,13 +1,10 @@
 use crate::dispatcher::Dispatcher;
-use crate::utils::{get_async_client, to_send};
-use futures::compat::Future01CompatExt;
+use crate::utils::to_send;
 use log::{error, info};
 use serde_json::{json, Value};
-use futures01::future::Future;
 
 struct Telegram {
-    prefix: reqwest::Url,
-    client: reqwest::r#async::Client,
+    prefix: String,
     dispatcher: Dispatcher,
     master: String,
     offset: i64,
@@ -19,8 +16,7 @@ impl Telegram {
         let tg_key = std::env::var("TG_KEY").unwrap();
         let url = "https://api.telegram.org/bot".to_owned() + &tg_key + "/";
         Self {
-            prefix: reqwest::Url::parse(&url).unwrap(),
-            client: get_async_client(),
+            prefix: url.to_owned(),
             dispatcher: Dispatcher::new(),
             master,
             offset: 0,
@@ -28,32 +24,39 @@ impl Telegram {
     }
 
     async fn get(&self) -> Result<Value, ()> {
-        self.client
-            .post(self.prefix.join("getUpdates").unwrap())
-            .json(&json!({"offset": self.offset, "timeout": 60}))
-            .send()
-            .and_then(|mut v| v.json::<Value>())
-            .map_err(|e| error!("send error: {}", e))
-            .compat()
+        use isahc::prelude::*;
+        Request::post(self.prefix.to_owned() + "/" + "getUpdates")
+            .timeout(std::time::Duration::from_secs(60))
+            .body(json!({"offset": self.offset, "timeout": 60}).to_string())
+            .map_err(|e| error!("body error: {}", e))?
+            .send_async()
             .await
+            .map_err(|e| error!("send error: {}", e))?
+            .into_body()
+            .json()
+            .map_err(|e| error!("json error: {}", e))
     }
 
     async fn send(&self, id: String, msg: String) -> Result<(), ()> {
-        self.client
-            .post(self.prefix.join("sendMessage").unwrap())
-            .json(
-                &json!({"chat_id": &id, "text": &msg, "parse_mode": "Markdown",
-                          "disable_web_page_preview": true}),
+        use isahc::prelude::*;
+        Request::post(self.prefix.to_owned() + "/" + "sendMessage")
+            .timeout(std::time::Duration::from_secs(60))
+            .body(
+                json!({"chat_id": &id, "text": &msg, "parse_mode": "Markdown",
+                       "disable_web_page_preview": true})
+                .to_string(),
             )
-            .send()
-            .and_then(|mut v| v.json::<Value>())
+            .map_err(|e| error!("body error: {}", e))?
+            .send_async()
+            .await
+            .map_err(|e| error!("send error: {}", e))?
+            .into_body()
+            .json::<Value>()
             .map(|resp| match resp["ok"] {
                 Value::Bool(true) => {}
                 _ => error!("send error: {}", resp.to_string()),
             })
-            .map_err(|e| error!("send error: {}", e))
-            .compat()
-            .await
+            .map_err(|e| error!("json error: {}", e))
     }
 
     fn process(&mut self, j: Value) {

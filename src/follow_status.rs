@@ -1,9 +1,9 @@
 use crate::twitter::Twitter;
 use futures::compat::Future01CompatExt;
+use futures01::future::Future;
 use log::{error, info};
 use serde_json::Value;
 use std::collections::HashMap;
-use futures01::future::Future;
 
 pub struct FollowStatus {
     twitter: Twitter,

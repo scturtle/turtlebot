@@ -3,11 +3,11 @@ use crate::utils::{establish_connection, get_async_client, send, sleep};
 use diesel::prelude::*;
 use feedfinder::detect_feeds;
 use futures::compat::Future01CompatExt;
+use futures01::future::Future;
+use futures01::stream::Stream;
 use log::{error, info};
 use rss::Channel;
 use std::str::FromStr;
-use futures01::future::Future;
-use futures01::stream::Stream;
 
 pub fn sub(url_str: &str) -> String {
     use crate::schema::rss::dsl::*;
