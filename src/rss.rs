@@ -1,10 +1,7 @@
 use crate::models::Rss;
-use crate::utils::{establish_connection, get_async_client, send, sleep};
+use crate::utils::{establish_connection, send, sleep};
 use diesel::prelude::*;
 use feedfinder::detect_feeds;
-use futures::compat::Future01CompatExt;
-use futures01::future::Future;
-use futures01::stream::Stream;
 use log::{error, info};
 use rss::Channel;
 use std::str::FromStr;
@@ -16,8 +13,8 @@ pub fn sub(url_str: &str) -> String {
         Ok(url) => url,
         _ => return "not url".into(),
     };
-    let text = match reqwest::get(url.clone()) {
-        Ok(mut resp) => resp.text().unwrap_or_default(),
+    let text = match isahc::get(url_str) {
+        Ok(resp) => resp.into_body().text().unwrap_or_default(),
         _ => return format!("cannot access {}", url_str),
     };
     let (feed_str, title_str, (latest_title_str, latest_link_str)) = match parse_rss_or_atom(&text)
@@ -36,10 +33,10 @@ pub fn sub(url_str: &str) -> String {
             None => return format!("no feed found in {}", url_str),
             Some(feed_url) => {
                 let feed_str = feed_url.to_string();
-                match reqwest::get(feed_url) {
+                match isahc::get(feed_url.to_string()) {
                     Err(_) => return format!("cannot access {}", feed_str),
-                    Ok(mut resp) => {
-                        let feed_text = resp.text().unwrap_or_default();
+                    Ok(resp) => {
+                        let feed_text = resp.into_body().text().unwrap_or_default();
                         match parse_rss_or_atom(&feed_text) {
                             None => return format!("cannot parse {}", feed_str),
                             Some((title_str, articles)) => (
@@ -141,7 +138,6 @@ pub async fn rss_monitor_loop() {
     use crate::schema::rss::dsl::*;
     let cid = std::env::var("MASTER_ID").unwrap();
     let interval = std::env::var("FOLLOW_INTERVAL").unwrap().parse().unwrap();
-    let client = get_async_client();
     let conn = establish_connection();
     loop {
         let rs = rss
@@ -153,20 +149,14 @@ pub async fn rss_monitor_loop() {
             });
         for r in rs {
             info!("fetch {}", r.feed);
-            let url_to_get = reqwest::Url::parse(&r.feed).unwrap();
-            let resp = client
-                .get(url_to_get)
-                .send()
-                .and_then(|t| t.into_body().concat2())
-                .compat()
-                .await;
-            if let Err(e) = resp {
-                error!("{}", e);
-                continue;
-            }
-            let body = resp.unwrap();
-            let text = std::str::from_utf8(&body).unwrap_or_default();
-            let result = parse_rss_or_atom(text);
+            let text = match isahc::get_async(&r.feed).await {
+                Ok(resp) => resp.into_body().text().unwrap_or_default(),
+                Err(e) => {
+                    error!("{}", e);
+                    continue;
+                }
+            };
+            let result = parse_rss_or_atom(&text);
             if result.is_none() {
                 error!("failed to parse {}", r.feed);
                 continue;

@@ -1,19 +1,17 @@
 use crate::twitter::Twitter;
-use futures::compat::Future01CompatExt;
-use futures01::future::Future;
-use log::{error, info};
+use log::error;
 use serde_json::Value;
 use std::collections::HashMap;
 
 pub struct FollowStatus {
     twitter: Twitter,
-    url: reqwest::Url,
+    url: url::Url,
     cursor: i64,
 }
 
 impl FollowStatus {
     pub fn new(user_id: &str, ftype: bool) -> Self {
-        let mut url = reqwest::Url::parse(if ftype {
+        let mut url = url::Url::parse(if ftype {
             "https://api.twitter.com/1.1/followers/list.json"
         } else {
             "https://api.twitter.com/1.1/friends/list.json"
@@ -33,14 +31,7 @@ impl FollowStatus {
         let mut url = self.url.clone();
         url.query_pairs_mut()
             .append_pair("cursor", &self.cursor.to_string());
-        self.twitter
-            .client
-            .get(url)
-            .send()
-            .and_then(|mut v| v.json::<Value>())
-            .map_err(|e| info!("twitter error: {}", e))
-            .compat()
-            .await
+        self.twitter.send(url).await
     }
 
     pub async fn fetch(&mut self) -> Option<HashMap<String, String>> {
