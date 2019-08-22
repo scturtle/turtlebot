@@ -1,13 +1,11 @@
-use crate::models::Rss;
-use crate::utils::{establish_connection, send, sleep};
-use diesel::prelude::*;
+use crate::db::{get_conn, insert_rss, list_rss, update_rss};
+use crate::utils::{send, sleep};
 use feedfinder::detect_feeds;
 use log::{error, info};
 use rss::Channel;
 use std::str::FromStr;
 
 pub fn sub(url_str: &str) -> String {
-    use crate::schema::rss::dsl::*;
     // FIXME: blocking
     let url = match url::Url::parse(url_str) {
         Ok(url) => url,
@@ -50,25 +48,30 @@ pub fn sub(url_str: &str) -> String {
             }
         },
     };
-    let conn = establish_connection();
-    let _ = diesel::insert_into(rss)
-        .values((
-            home.eq(url_str),
-            title.eq(&title_str),
-            feed.eq(feed_str),
-            latest_title.eq(latest_title_str),
-            latest_link.eq(latest_link_str),
-        ))
-        .execute(&conn);
+    let conn = get_conn();
+    if let Err(e) = insert_rss(
+        &conn,
+        url_str,
+        &title_str,
+        &feed_str,
+        &latest_title_str,
+        &latest_link_str,
+    ) {
+        error!("{}", e);
+    }
     return format!("subcribed \"{}\"", title_str);
 }
 
 pub fn unsub(id_to_del: i32) -> String {
-    use crate::schema::rss::dsl::*;
-    let conn = establish_connection();
-    match diesel::delete(rss.filter(id.eq(id_to_del))).execute(&conn) {
-        Ok(n) if n > 0 => "done",
-        Ok(_) => "not found",
+    let conn = get_conn();
+    match conn.execute("DELETE FROM rss where id = ?1", &[id_to_del]) {
+        Ok(n) => {
+            if n > 0 {
+                "done"
+            } else {
+                "not found"
+            }
+        }
         Err(e) => {
             error!("{}", e);
             "error"
@@ -78,15 +81,12 @@ pub fn unsub(id_to_del: i32) -> String {
 }
 
 pub fn list() -> String {
-    use crate::schema::rss::dsl::*;
-    let conn = establish_connection();
-    let s = rss
-        .order(id.asc())
-        .get_results::<Rss>(&conn)
-        .unwrap_or_else(|e| {
-            error!("{}", e);
-            vec![]
-        })
+    let conn = get_conn();
+    let rs = list_rss(&conn).unwrap_or_else(|e| {
+        error!("{}", e);
+        vec![]
+    });
+    let s = rs
         .into_iter()
         .map(|r| format!("{} [{}]({})", r.id, r.title, r.home))
         .collect::<Vec<_>>()
@@ -135,18 +135,14 @@ fn parse_rss_or_atom(text: &str) -> Option<(String, Vec<(String, String)>)> {
 }
 
 pub async fn rss_monitor_loop() {
-    use crate::schema::rss::dsl::*;
     let cid = std::env::var("MASTER_ID").unwrap();
     let interval = std::env::var("FOLLOW_INTERVAL").unwrap().parse().unwrap();
-    let conn = establish_connection();
+    let conn = get_conn();
     loop {
-        let rs = rss
-            .order(id.asc())
-            .get_results::<Rss>(&conn)
-            .unwrap_or_else(|e| {
-                error!("{}", e);
-                vec![]
-            });
+        let rs = list_rss(&conn).unwrap_or_else(|e| {
+            error!("{}", e);
+            vec![]
+        });
         for r in rs {
             info!("fetch {}", r.feed);
             let text = match isahc::get_async(&r.feed).await {
@@ -162,25 +158,23 @@ pub async fn rss_monitor_loop() {
                 continue;
             }
             let (_, articles) = result.unwrap();
-            if let Ok(mut t) = rss.filter(feed.eq(&r.feed)).first::<Rss>(&conn) {
-                let cnt = articles
-                    .iter()
-                    .position(|(a, b)| (a, b) == (&t.latest_title, &t.latest_link))
-                    .unwrap_or(1);
-                let mut msg = String::new();
-                for (new_title, new_link) in articles.iter().take(cnt) {
-                    // update with the first one
-                    if msg.is_empty() {
-                        t.latest_link = new_link.clone();
-                        t.latest_title = new_title.clone();
-                        let _ = t.save_changes::<Rss>(&conn);
+            let cnt = articles
+                .iter()
+                .position(|(a, b)| (a, b) == (&r.latest_title, &r.latest_link))
+                .unwrap_or(1);
+            let mut msg = String::new();
+            for (new_title, new_link) in articles.iter().take(cnt) {
+                // update with the first one
+                if msg.is_empty() {
+                    if let Err(e) = update_rss(&conn, r.id, new_title, new_link) {
+                        error!("{}", e);
                     }
-                    info!("new post [{}]({})", new_title, new_link);
-                    msg.push_str(&format!("\n[{}]({})", new_title, new_link));
                 }
-                if !msg.is_empty() {
-                    send(&cid, &msg[1..]);
-                }
+                info!("new post [{}]({})", new_title, new_link);
+                msg.push_str(&format!("\n[{}]({})", new_title, new_link));
+            }
+            if !msg.is_empty() {
+                send(&cid, &msg[1..]);
             }
         }
         sleep(interval).await;

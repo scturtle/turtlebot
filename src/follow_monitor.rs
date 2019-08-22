@@ -1,7 +1,6 @@
+use crate::db::{get_conn, insert_follow_log, load_follow_snapshot, save_follow_snapshot};
 use crate::follow_status::FollowStatus;
-use crate::models::FollowLog;
-use crate::utils::{establish_connection, sleep};
-use diesel::prelude::*;
+use crate::utils::sleep;
 use log::{error, info};
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -20,14 +19,10 @@ struct FollowMonitor {
 
 impl FollowMonitor {
     fn new() -> Self {
-        use crate::schema::follow_log::dsl::*;
-        let conn = establish_connection();
+        let conn = get_conn();
         let mut snapshot = None;
-        if let Ok(log) = follow_log
-            .filter(action.eq("meta"))
-            .first::<FollowLog>(&conn)
-        {
-            snapshot = serde_json::from_str(&log.name).ok();
+        if let Ok(snapshot_str) = load_follow_snapshot(&conn) {
+            snapshot = serde_json::from_str(&snapshot_str).ok();
             info!("loaded follow snapshot {}", snapshot.is_some());
         }
         Self {
@@ -49,8 +44,7 @@ impl FollowMonitor {
         new_following: HashMap<String, String>,
         new_followers: HashMap<String, String>,
     ) {
-        use crate::schema::follow_log::dsl::*;
-        let conn = establish_connection();
+        let conn = get_conn();
         match &self.snapshot {
             Some(snapshot) => {
                 let FollowSnapshot {
@@ -64,27 +58,27 @@ impl FollowMonitor {
                 let foed_ids = Self::diff_keys(&new_followers, &followers);
                 for uid in unfo_ids {
                     info!("unfo {}", following[uid]);
-                    let _ = diesel::insert_into(follow_log)
-                        .values((name.eq(&following[uid]), action.eq("unfo")))
-                        .execute(&conn);
+                    if let Err(e) = insert_follow_log(&conn, &following[uid], "unfo") {
+                        error!("insert_follow_log: {}", e);
+                    }
                 }
                 for uid in fo_ids {
                     info!("fo {}", new_following[uid]);
-                    let _ = diesel::insert_into(follow_log)
-                        .values((name.eq(&new_following[uid]), action.eq("fo")))
-                        .execute(&conn);
+                    if let Err(e) = insert_follow_log(&conn, &new_following[uid], "fo") {
+                        error!("insert_follow_log: {}", e);
+                    }
                 }
                 for uid in unfoed_ids {
                     info!("unfoed {}", followers[uid]);
-                    let _ = diesel::insert_into(follow_log)
-                        .values((name.eq(&followers[uid]), action.eq("unfoed")))
-                        .execute(&conn);
+                    if let Err(e) = insert_follow_log(&conn, &followers[uid], "unfoed") {
+                        error!("insert_follow_log: {}", e);
+                    }
                 }
                 for uid in foed_ids {
                     info!("foed {}", new_followers[uid]);
-                    let _ = diesel::insert_into(follow_log)
-                        .values((name.eq(&new_followers[uid]), action.eq("foed")))
-                        .execute(&conn);
+                    if let Err(e) = insert_follow_log(&conn, &new_followers[uid], "foed") {
+                        error!("insert_follow_log: {}", e);
+                    }
                 }
             }
             None => {}
@@ -94,23 +88,11 @@ impl FollowMonitor {
             followers: new_followers,
         });
         let snapshot_str = serde_json::to_string(self.snapshot.as_ref().unwrap()).unwrap();
-        match &mut follow_log
-            .filter(action.eq("meta"))
-            .first::<FollowLog>(&conn)
-            .optional()
-        {
-            Ok(Some(log)) => {
-                log.name = snapshot_str;
-                let _ = log.save_changes::<FollowLog>(&conn);
-            }
-            Ok(None) => {
-                let _ = diesel::insert_into(follow_log)
-                    .values((name.eq(&snapshot_str), action.eq("meta")))
-                    .execute(&conn);
-            }
-            Err(e) => error!("{}", e),
+        if let Err(e) = save_follow_snapshot(&conn, &snapshot_str) {
+            error!("failed to save follow meta: {}", e);
+        } else {
+            info!("follow snapshot saved");
         }
-        info!("follow snapshot saved");
     }
 }
 

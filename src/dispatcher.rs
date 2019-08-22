@@ -1,8 +1,6 @@
-use crate::models::FollowLog;
+use crate::db::get_conn;
 use crate::rss;
-use crate::utils::{establish_connection, format_time, send};
-use diesel::prelude::*;
-use log::error;
+use crate::utils::{format_time, send};
 use std::ops::Deref;
 
 pub struct Dispatcher {}
@@ -32,28 +30,25 @@ impl Dispatcher {
     }
 
     fn cmd_f(&self) -> String {
-        let conn = establish_connection();
-        use crate::schema::follow_log::dsl::*;
-        let s = follow_log
-            .filter(action.ne("meta"))
-            .order(time.desc())
-            .limit(6)
-            .get_results::<FollowLog>(&conn)
-            .unwrap_or_else(|e| {
-                error!("{}", e);
-                vec![]
-            })
-            .into_iter()
-            .map(|log| {
-                format!(
+        let conn = get_conn();
+        let mut stmt = conn
+            .prepare("select name, action, time from follow_log order by time desc limit 6")
+            .unwrap();
+        let iter = stmt
+            .query_map(rusqlite::NO_PARAMS, |r| {
+                let name: String = r.get(0).unwrap();
+                let action: String = r.get(1).unwrap();
+                let time = r
+                    .get(2)
+                    .map(|t: chrono::NaiveDateTime| format_time(&t))
+                    .unwrap();
+                Ok(format!(
                     "{0} {1} [{2}](twitter.com/{2})",
-                    format_time(&log.time),
-                    log.action,
-                    log.name
-                )
+                    time, action, name
+                ))
             })
-            .collect::<Vec<_>>()
-            .join("\n");
+            .unwrap();
+        let s = iter.filter_map(Result::ok).collect::<Vec<_>>().join("\n");
         if s.is_empty() {
             "no results".to_owned()
         } else {
