@@ -1,4 +1,4 @@
-use crate::db::{get_conn, insert_rss, list_rss, update_rss};
+use crate::db::{get_conn, insert_rss, delete_rss, list_rss, update_rss};
 use crate::utils::{send, sleep};
 use feedfinder::detect_feeds;
 use log::{error, info};
@@ -64,7 +64,7 @@ pub fn sub(url_str: &str) -> String {
 
 pub fn unsub(id_to_del: i32) -> String {
     let conn = get_conn();
-    match conn.execute("DELETE FROM rss where id = ?1", &[id_to_del]) {
+    match delete_rss(&conn, id_to_del) {
         Ok(n) => {
             if n > 0 {
                 "done"

@@ -7,6 +7,8 @@ mod telegram;
 mod twitter;
 mod utils;
 
+#[macro_use]
+extern crate rusqlite;
 use log::info;
 
 #[runtime::main]

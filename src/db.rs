@@ -1,4 +1,4 @@
-use rusqlite::{Connection, Result, NO_PARAMS};
+use rusqlite::{Connection, Result};
 
 pub fn get_conn() -> Connection {
     Connection::open("data.db").unwrap()
@@ -12,7 +12,7 @@ pub fn init_db() {
   name TEXT NOT NULL,
   action TEXT NOT NULL,
   time TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL)",
-        NO_PARAMS,
+        params![],
     )
     .unwrap();
     conn.execute(
@@ -23,30 +23,30 @@ pub fn init_db() {
   feed TEXT NOT NULL,
   latest_title TEXT NOT NULL,
   latest_link TEXT NOT NULL)",
-        NO_PARAMS,
+        params![],
     )
     .unwrap();
 }
 
 pub fn load_follow_snapshot(conn: &Connection) -> Result<String> {
     conn.query_row(
-        "SELECT name FROM follow_log where action = meta",
-        NO_PARAMS,
+        "SELECT name FROM follow_log where action = \"meta\"",
+        params![],
         |r| r.get(0),
     )
 }
 
 pub fn save_follow_snapshot(conn: &Connection, snapshot: &str) -> Result<usize> {
-    let mut stmt = conn.prepare("SELECT name FROM follow_log where action = meta")?;
-    if stmt.exists(NO_PARAMS).unwrap_or(false) {
+    let mut stmt = conn.prepare("SELECT name FROM follow_log where action = \"meta\"")?;
+    if stmt.exists(params![]).unwrap_or(false) {
         conn.execute(
-            "INSERT INTO follow_log (name, action) VALUES (?1, ?2)",
-            &[&snapshot, "meta"],
+            "UPDATE follow_log set name = ?1 where action = ?2",
+            params![snapshot, "meta"],
         )
     } else {
         conn.execute(
-            "UPDATE follow_log set name = ?1 where action = ?2",
-            &[&snapshot, "meta"],
+            "INSERT INTO follow_log (name, action) VALUES (?1, ?2)",
+            params![snapshot, "meta"],
         )
     }
 }
@@ -54,8 +54,18 @@ pub fn save_follow_snapshot(conn: &Connection, snapshot: &str) -> Result<usize> 
 pub fn insert_follow_log(conn: &Connection, name: &str, action: &str) -> Result<usize> {
     conn.execute(
         "INSERT INTO follow_log (name, action) VALUES (?1, ?2)",
-        &[&name, &action],
+        params![name, action],
     )
+}
+
+pub fn get_follow_log(conn: &Connection) -> Result<Vec<(String, String, chrono::NaiveDateTime)>> {
+    let mut stmt =
+        conn.prepare("select name, action, time from follow_log where action != \"meta\" order by time desc limit 6")?;
+    let v = stmt
+        .query_map(params![], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+        .filter_map(Result::ok)
+        .collect();
+    Ok(v)
 }
 
 pub struct Rss {
@@ -72,7 +82,7 @@ pub fn list_rss(conn: &Connection) -> Result<Vec<Rss>> {
         "SELECT id, home, title, feed, latest_title, latest_link from rss order by id asc",
     )?;
     let v = stmt
-        .query_map(rusqlite::NO_PARAMS, |r| {
+        .query_map(rusqlite::params![], |r| {
             Ok(Rss {
                 id: r.get(0)?,
                 home: r.get(1)?,
@@ -97,12 +107,21 @@ pub fn insert_rss(
 ) -> Result<usize> {
     conn.execute(
         "INSERT INTO rss (home, title, feed, latest_title, latest_link) VALUES (?1, ?2, ?3, ?4, ?5)",
-        &[home, title, feed, latest_title, latest_link])
+        params![home, title, feed, latest_title, latest_link])
 }
 
-pub fn update_rss(conn: &Connection, id: i32, latest_title: &str, latest_link: &str) -> Result<usize> {
+pub fn delete_rss(conn: &Connection, id_to_del: i32) -> Result<usize> {
+    conn.execute("DELETE FROM rss where id = ?1", params![id_to_del])
+}
+
+pub fn update_rss(
+    conn: &Connection,
+    id: i32,
+    latest_title: &str,
+    latest_link: &str,
+) -> Result<usize> {
     conn.execute(
         "UPDATE rss set latest_title = ?1, latest_link = ?2 where id = ?3",
-        &[latest_title, latest_link, &id.to_string()]
+        params![latest_title, latest_link, id],
     )
 }
