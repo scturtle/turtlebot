@@ -1,4 +1,4 @@
-use crate::db::{get_conn, insert_rss, delete_rss, list_rss, update_rss};
+use crate::db::{delete_rss, get_conn, insert_rss, list_rss, update_rss};
 use crate::utils::{send, sleep};
 use feedfinder::detect_feeds;
 use log::{error, info};

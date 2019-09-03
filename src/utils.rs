@@ -26,5 +26,5 @@ pub fn format_time(time: &chrono::NaiveDateTime) -> String {
 }
 
 pub async fn sleep(n: u64) {
-    runtime::time::Delay::new(std::time::Duration::from_secs(n)).await;
+    let _ = futures_timer::Delay::new(std::time::Duration::from_secs(n)).await;
 }
