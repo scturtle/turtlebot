@@ -9,6 +9,7 @@ mod utils;
 
 #[macro_use]
 extern crate rusqlite;
+use async_std::task;
 use log::info;
 
 fn main() {
@@ -16,10 +17,7 @@ fn main() {
     env_logger::init();
     info!("start");
     db::init_db();
-    let fut = futures::future::join3(
-        telegram::telegram_loop(),
-        follow_monitor::follow_monitor_loop(),
-        rss::rss_monitor_loop(),
-    );
-    futures::executor::block_on(fut);
+    task::spawn(follow_monitor::follow_monitor_loop());
+    task::spawn(rss::rss_monitor_loop());
+    task::block_on(telegram::telegram_loop());
 }
