@@ -16,7 +16,7 @@ impl Twitter {
             .timeout(std::time::Duration::from_secs(60))
             .build()
             .unwrap();
-        let mut request = http::Request::builder();
+        let mut request = isahc::http::Request::builder();
         request.header("x-csrf-token", self.cfg["x-csrf-token"].as_str().unwrap());
         request.header("authorization", self.cfg["authorization"].as_str().unwrap());
         request.header("cookie", self.cfg["cookie"].as_str().unwrap());
