@@ -16,9 +16,9 @@ chrono = "0.4"
 chrono-tz = "0.5"
 rss = "1"
 atom_syndication = "0.8"
-feedfinder = "0.2"
-url = "1"  # feedfinder
-isahc = { version = "0.8", features = ["json"] }
+feedfinder = "0.3"
+url = "2"
+isahc = { version = "0.9", features = ["json"] }
 rusqlite = { version = "0.21", features = ["chrono"] }
 futures = "0.3"
-async-std = "1"
+async-std = { version = "1.5", features = ["unstable"] }

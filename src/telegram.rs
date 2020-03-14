@@ -1,5 +1,5 @@
 use crate::dispatcher::Dispatcher;
-use crate::utils::to_send;
+use crate::utils::recv;
 use log::{error, info};
 use serde_json::{json, Value};
 
@@ -16,7 +16,7 @@ impl Telegram {
         let tg_key = std::env::var("TG_KEY").unwrap();
         let url = "https://api.telegram.org/bot".to_owned() + &tg_key + "/";
         Self {
-            prefix: url.to_owned(),
+            prefix: url,
             dispatcher: Dispatcher::new(),
             master,
             offset: 0,
@@ -33,7 +33,6 @@ impl Telegram {
             .send_async()
             .await
             .map_err(|e| error!("send error: {}", e))?
-            .into_body()
             .json()
             .map_err(|e| error!("json error: {}", e))
     }
@@ -52,7 +51,6 @@ impl Telegram {
             .send_async()
             .await
             .map_err(|e| error!("send error: {}", e))?
-            .into_body()
             .json::<Value>()
             .map(|resp| match resp["ok"] {
                 Value::Bool(true) => {}
@@ -61,7 +59,7 @@ impl Telegram {
             .map_err(|e| error!("json error: {}", e))
     }
 
-    fn process(&mut self, j: Value) {
+    async fn process(&mut self, j: Value) {
         if Value::Bool(true) != j["ok"] {
             error!("polling error: {:?}", j["description"]);
         } else {
@@ -87,7 +85,7 @@ impl Telegram {
                 }
                 if let Value::String(text) = &m["text"] {
                     info!("tg recv {}", text);
-                    self.dispatcher.dispatch(&cid, text);
+                    self.dispatcher.dispatch(&cid, text).await;
                 }
             }
         }
@@ -97,11 +95,11 @@ impl Telegram {
 pub async fn telegram_loop() {
     let mut tg = Telegram::new();
     loop {
-        if let Some((id, msg)) = to_send() {
+        if let Some((id, msg)) = recv().await {
             let _ = tg.send(id, msg).await;
         }
         if let Ok(j) = tg.get().await {
-            tg.process(j);
+            tg.process(j).await;
         }
     }
 }

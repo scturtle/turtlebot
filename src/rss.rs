@@ -1,6 +1,7 @@
 use crate::db::{delete_rss, get_conn, insert_rss, list_rss, update_rss};
 use crate::utils::{send, sleep};
 use feedfinder::detect_feeds;
+use isahc::prelude::*;
 use log::{error, info};
 use rss::Channel;
 use std::str::FromStr;
@@ -12,7 +13,7 @@ pub fn sub(url_str: &str) -> String {
         _ => return "not url".into(),
     };
     let text = match isahc::get(url_str) {
-        Ok(resp) => resp.into_body().text().unwrap_or_default(),
+        Ok(mut resp) => resp.text().unwrap_or_default(),
         _ => return format!("cannot access {}", url_str),
     };
     let (feed_str, title_str, (latest_title_str, latest_link_str)) = match parse_rss_or_atom(&text)
@@ -33,8 +34,8 @@ pub fn sub(url_str: &str) -> String {
                 let feed_str = feed_url.to_string();
                 match isahc::get(feed_url.to_string()) {
                     Err(_) => return format!("cannot access {}", feed_str),
-                    Ok(resp) => {
-                        let feed_text = resp.into_body().text().unwrap_or_default();
+                    Ok(mut resp) => {
+                        let feed_text = resp.text().unwrap_or_default();
                         match parse_rss_or_atom(&feed_text) {
                             None => return format!("cannot parse {}", feed_str),
                             Some((title_str, articles)) => (
@@ -146,7 +147,7 @@ pub async fn rss_monitor_loop() {
         for r in rs {
             info!("fetch {}", r.feed);
             let text = match isahc::get_async(&r.feed).await {
-                Ok(resp) => resp.into_body().text().unwrap_or_default(),
+                Ok(mut resp) => resp.text().unwrap_or_default(),
                 Err(e) => {
                     error!("{}", e);
                     continue;
@@ -174,7 +175,7 @@ pub async fn rss_monitor_loop() {
                 msg.push_str(&format!("\n[{}]({})", new_title, new_link));
             }
             if !msg.is_empty() {
-                send(&cid, &msg[1..]);
+                send(&cid, &msg[1..]).await;
             }
         }
         sleep(interval).await;

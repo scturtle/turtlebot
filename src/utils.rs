@@ -1,20 +1,18 @@
+use async_std::sync::{channel, Receiver, Sender};
 use lazy_static::lazy_static;
-use std::sync::Mutex;
+
+type Message = (String, String);
 
 lazy_static! {
-    static ref SEND_QUEUE: Mutex<std::collections::VecDeque<(String, String)>> =
-        Mutex::new(Default::default());
+    static ref CHANNEL: (Sender<Message>, Receiver<Message>) = channel(100);
 }
 
-pub fn send(id: &str, msg: &str) {
-    SEND_QUEUE
-        .lock()
-        .unwrap()
-        .push_back((id.to_owned(), msg.to_owned()));
+pub async fn send(id: &str, msg: &str) {
+    CHANNEL.0.send((id.to_owned(), msg.to_owned())).await
 }
 
-pub fn to_send() -> Option<(String, String)> {
-    SEND_QUEUE.lock().unwrap().pop_front()
+pub async fn recv() -> Option<(String, String)> {
+    CHANNEL.1.recv().await
 }
 
 pub fn format_time(time: &chrono::NaiveDateTime) -> String {

@@ -1,3 +1,4 @@
+use isahc::prelude::*;
 use log::error;
 use serde_json::Value;
 
@@ -16,16 +17,15 @@ impl Twitter {
             .timeout(std::time::Duration::from_secs(60))
             .build()
             .unwrap();
-        let mut request = isahc::http::Request::builder();
-        request.header("x-csrf-token", self.cfg["x-csrf-token"].as_str().unwrap());
-        request.header("authorization", self.cfg["authorization"].as_str().unwrap());
-        request.header("cookie", self.cfg["cookie"].as_str().unwrap());
-        request.uri(url.into_string());
+        let request = isahc::http::Request::builder()
+            .header("x-csrf-token", self.cfg["x-csrf-token"].as_str().unwrap())
+            .header("authorization", self.cfg["authorization"].as_str().unwrap())
+            .header("cookie", self.cfg["cookie"].as_str().unwrap())
+            .uri(url.into_string());
         client
             .send_async(request.body(()).unwrap())
             .await
             .map_err(|e| error!("twitter error: {}", e))?
-            .into_body()
             .json()
             .map_err(|e| error!("json error: {}", e))
     }

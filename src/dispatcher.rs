@@ -11,22 +11,22 @@ impl Dispatcher {
         Self {}
     }
 
-    pub fn dispatch(&self, cid: &str, msg: &str) {
+    pub async fn dispatch(&self, cid: &str, msg: &str) {
         let cols: Vec<_> = msg.split_whitespace().collect();
         match cols.get(0).map(Deref::deref) {
-            Some("/f") => send(cid, &self.cmd_f()),
-            Some("/rss") => send(cid, &rss::list()),
+            Some("/f") => send(cid, &self.cmd_f()).await,
+            Some("/rss") => send(cid, &rss::list()).await,
             Some("/sub") => {
                 let url = cols.get(1).map(Deref::deref);
                 let resp = url.map(rss::sub).unwrap_or("need url".into());
-                send(cid, &resp);
+                send(cid, &resp).await;
             }
             Some("/unsub") => {
                 let id_to_del = cols.get(1).and_then(|t| t.parse::<i32>().ok());
                 let resp = id_to_del.map(rss::unsub).unwrap_or("need id to del".into());
-                send(cid, &resp);
+                send(cid, &resp).await;
             }
-            _ => send(cid, "???"),
+            _ => send(cid, "???").await,
         }
     }
 
