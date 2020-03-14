@@ -1,5 +1,6 @@
 use crate::dispatcher::Dispatcher;
 use crate::utils::recv;
+use futures::{future::FutureExt, select};
 use log::{error, info};
 use serde_json::{json, Value};
 
@@ -95,11 +96,17 @@ impl Telegram {
 pub async fn telegram_loop() {
     let mut tg = Telegram::new();
     loop {
-        if let Some((id, msg)) = recv().await {
-            let _ = tg.send(id, msg).await;
-        }
-        if let Ok(j) = tg.get().await {
-            tg.process(j).await;
+        select! {
+            to_send = recv().fuse() => {
+                if let Some((id, msg)) = to_send {
+                    let _ = tg.send(id, msg).await;
+                }
+            }
+            msg = tg.get().fuse() => {
+                if let Ok(j) = msg {
+                    tg.process(j).await;
+                }
+            }
         }
     }
 }

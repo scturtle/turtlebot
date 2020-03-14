@@ -14,7 +14,10 @@ impl Dispatcher {
     pub async fn dispatch(&self, cid: &str, msg: &str) {
         let cols: Vec<_> = msg.split_whitespace().collect();
         match cols.get(0).map(Deref::deref) {
-            Some("/f") => send(cid, &self.cmd_f()).await,
+            Some("/f") => {
+                let n = cols.get(1).and_then(|n| n.parse().ok()).unwrap_or(6);
+                send(cid, &self.cmd_f(n)).await;
+            }
             Some("/rss") => send(cid, &rss::list()).await,
             Some("/sub") => {
                 let url = cols.get(1).map(Deref::deref);
@@ -30,9 +33,10 @@ impl Dispatcher {
         }
     }
 
-    fn cmd_f(&self) -> String {
+    fn cmd_f(&self, n: u32) -> String {
+        let n = n.min(30);
         let conn = get_conn();
-        let logs = match get_follow_log(&conn) {
+        let logs = match get_follow_log(&conn, n) {
             Err(e) => {
                 error!("{}", e);
                 return format!("{}", e);

@@ -58,11 +58,14 @@ pub fn insert_follow_log(conn: &Connection, name: &str, action: &str) -> Result<
     )
 }
 
-pub fn get_follow_log(conn: &Connection) -> Result<Vec<(String, String, chrono::NaiveDateTime)>> {
+pub fn get_follow_log(
+    conn: &Connection,
+    n: u32,
+) -> Result<Vec<(String, String, chrono::NaiveDateTime)>> {
     let mut stmt =
-        conn.prepare("select name, action, time from follow_log where action != \"meta\" order by time desc limit 6")?;
+        conn.prepare("select name, action, time from follow_log where action != \"meta\" order by time desc limit ?1")?;
     let v = stmt
-        .query_map(params![], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+        .query_map(params![n], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
         .filter_map(Result::ok)
         .collect();
     Ok(v)
