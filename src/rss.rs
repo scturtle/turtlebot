@@ -139,6 +139,10 @@ pub async fn rss_monitor_loop() {
     let cid = std::env::var("MASTER_ID").unwrap();
     let interval = std::env::var("FOLLOW_INTERVAL").unwrap().parse().unwrap();
     let conn = get_conn();
+    let client = isahc::HttpClient::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .unwrap();
     loop {
         let rs = list_rss(&conn).unwrap_or_else(|e| {
             error!("{}", e);
@@ -146,7 +150,7 @@ pub async fn rss_monitor_loop() {
         });
         for r in rs {
             info!("fetch {}", r.feed);
-            let text = match isahc::get_async(&r.feed).await {
+            let text = match client.get_async(&r.feed).await {
                 Ok(mut resp) => resp.text().unwrap_or_default(),
                 Err(e) => {
                     error!("{}", e);
