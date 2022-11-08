@@ -1,18 +1,27 @@
-use async_std::sync::{channel, Receiver, Sender};
+use async_channel::unbounded;
+use async_std::{channel::Receiver, channel::Sender};
 use lazy_static::lazy_static;
 
 type Message = (String, String);
 
 lazy_static! {
-    static ref CHANNEL: (Sender<Message>, Receiver<Message>) = channel(100);
+    static ref CHANNEL: (Sender<Message>, Receiver<Message>) = unbounded();
 }
 
 pub async fn send(id: &str, msg: &str) {
-    CHANNEL.0.send((id.to_owned(), msg.to_owned())).await
+    if let Err(e) = CHANNEL.0.send((id.to_owned(), msg.to_owned())).await {
+        log::error!("channel send error {e}");
+    };
 }
 
 pub async fn recv() -> Option<(String, String)> {
-    CHANNEL.1.recv().await
+    match CHANNEL.1.recv().await {
+        Err(e) => {
+            log::error!("channel recv error {e}");
+            None
+        }
+        Ok(res) => Some(res),
+    }
 }
 
 pub fn format_time(time: &chrono::NaiveDateTime) -> String {

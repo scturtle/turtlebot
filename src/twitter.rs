@@ -21,12 +21,13 @@ impl Twitter {
             .header("x-csrf-token", self.cfg["x-csrf-token"].as_str().unwrap())
             .header("authorization", self.cfg["authorization"].as_str().unwrap())
             .header("cookie", self.cfg["cookie"].as_str().unwrap())
-            .uri(url.into_string());
+            .uri(String::from(url));
         client
             .send_async(request.body(()).unwrap())
             .await
             .map_err(|e| error!("twitter error: {}", e))?
             .json()
+            .await
             .map_err(|e| error!("json error: {}", e))
     }
 }

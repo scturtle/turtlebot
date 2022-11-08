@@ -60,7 +60,7 @@ pub fn sub(url_str: &str) -> String {
     ) {
         error!("{}", e);
     }
-    return format!("subcribed \"{}\"", title_str);
+    format!("subcribed \"{}\"", title_str)
 }
 
 pub fn unsub(id_to_del: i32) -> String {
@@ -100,7 +100,7 @@ pub fn list() -> String {
 }
 
 fn parse_rss_or_atom(text: &str) -> Option<(String, Vec<(String, String)>)> {
-    if let Ok(ch) = Channel::from_str(&text) {
+    if let Ok(ch) = Channel::from_str(text) {
         let title_str = ch.title().to_owned();
         let articles = ch
             .items()
@@ -113,14 +113,14 @@ fn parse_rss_or_atom(text: &str) -> Option<(String, Vec<(String, String)>)> {
             })
             .collect();
         Some((title_str, articles))
-    } else if let Ok(feed) = atom_syndication::Feed::from_str(&text) {
-        let title_str = feed.title().to_owned();
+    } else if let Ok(feed) = atom_syndication::Feed::from_str(text) {
+        let title_str = feed.title().value.clone();
         let articles = feed
             .entries()
             .iter()
             .map(|entry| {
                 (
-                    entry.title().into(),
+                    entry.title().value.clone(),
                     entry
                         .links()
                         .first()
@@ -151,7 +151,7 @@ pub async fn rss_monitor_loop() {
         for r in rs {
             info!("fetch {}", r.feed);
             let text = match client.get_async(&r.feed).await {
-                Ok(mut resp) => resp.text().unwrap_or_default(),
+                Ok(mut resp) => resp.text().await.unwrap_or_default(),
                 Err(e) => {
                     error!("{}", e);
                     continue;

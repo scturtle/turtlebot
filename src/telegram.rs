@@ -26,7 +26,7 @@ impl Telegram {
 
     async fn get(&self) -> Result<Value, ()> {
         use isahc::prelude::*;
-        Request::post(self.prefix.to_owned() + "getupdates")
+        isahc::Request::post(self.prefix.to_owned() + "getupdates")
             .timeout(std::time::Duration::from_secs(60))
             .header("Content-Type", "application/json")
             .body(json!({"offset": self.offset, "timeout": 60}).to_string())
@@ -35,12 +35,13 @@ impl Telegram {
             .await
             .map_err(|e| error!("send error: {}", e))?
             .json()
+            .await
             .map_err(|e| error!("json error: {}", e))
     }
 
     async fn send(&self, id: String, msg: String) -> Result<(), ()> {
         use isahc::prelude::*;
-        Request::post(self.prefix.to_owned() + "sendMessage")
+        isahc::Request::post(self.prefix.to_owned() + "sendMessage")
             .timeout(std::time::Duration::from_secs(60))
             .header("Content-Type", "application/json")
             .body(
@@ -53,6 +54,7 @@ impl Telegram {
             .await
             .map_err(|e| error!("send error: {}", e))?
             .json::<Value>()
+            .await
             .map(|resp| match resp["ok"] {
                 Value::Bool(true) => {}
                 _ => error!("send error: {}", resp.to_string()),

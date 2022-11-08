@@ -52,10 +52,10 @@ impl FollowMonitor {
                     followers,
                 } = snapshot;
                 info!("processing follow status");
-                let unfo_ids = Self::diff_keys(&following, &new_following);
-                let fo_ids = Self::diff_keys(&new_following, &following);
-                let unfoed_ids = Self::diff_keys(&followers, &new_followers);
-                let foed_ids = Self::diff_keys(&new_followers, &followers);
+                let unfo_ids = Self::diff_keys(following, &new_following);
+                let fo_ids = Self::diff_keys(&new_following, following);
+                let unfoed_ids = Self::diff_keys(followers, &new_followers);
+                let foed_ids = Self::diff_keys(&new_followers, followers);
                 for uid in unfo_ids {
                     info!("unfo {}", following[uid]);
                     if let Err(e) = insert_follow_log(&conn, &following[uid], "unfo") {

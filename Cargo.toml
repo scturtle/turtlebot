@@ -7,18 +7,19 @@ edition = "2018"
 [dependencies]
 dotenv = "0.15"
 log = "0.4"
-env_logger = "0.7"
+env_logger = "0.9"
 serde = "1"
 serde_json = "1"
 serde_derive = "1"
 lazy_static = "1.4"
 chrono = "0.4"
-chrono-tz = "0.5"
-rss = "1"
-atom_syndication = "0.8"
-feedfinder = "0.3"
+chrono-tz = "0.8"
+rss = "2"
+atom_syndication = "0.11"
+feedfinder = "0.4"
 url = "2"
-isahc = { version = "0.9", features = ["json"] }
-rusqlite = { version = "0.21", features = ["chrono"] }
+isahc = { version = "1.7", features = ["json"] }
+rusqlite = { version = "0.28", features = ["chrono"] }
 futures = "0.3"
-async-std = { version = "1.5", features = ["unstable"] }
+async-std = { version = "1.12", features = ["unstable"] }
+async-channel = "1.7"

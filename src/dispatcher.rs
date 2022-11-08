@@ -13,7 +13,7 @@ impl Dispatcher {
 
     pub async fn dispatch(&self, cid: &str, msg: &str) {
         let cols: Vec<_> = msg.split_whitespace().collect();
-        match cols.get(0).map(Deref::deref) {
+        match cols.first().map(Deref::deref) {
             Some("/f") => {
                 let n = cols.get(1).and_then(|n| n.parse().ok()).unwrap_or(6);
                 send(cid, &self.cmd_f(n)).await;
@@ -21,12 +21,14 @@ impl Dispatcher {
             Some("/rss") => send(cid, &rss::list()).await,
             Some("/sub") => {
                 let url = cols.get(1).map(Deref::deref);
-                let resp = url.map(rss::sub).unwrap_or("need url".into());
+                let resp = url.map(rss::sub).unwrap_or_else(|| "need url".into());
                 send(cid, &resp).await;
             }
             Some("/unsub") => {
                 let id_to_del = cols.get(1).and_then(|t| t.parse::<i32>().ok());
-                let resp = id_to_del.map(rss::unsub).unwrap_or("need id to del".into());
+                let resp = id_to_del
+                    .map(rss::unsub)
+                    .unwrap_or_else(|| "need id to del".into());
                 send(cid, &resp).await;
             }
             _ => send(cid, "???").await,
