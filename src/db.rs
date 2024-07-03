@@ -4,7 +4,8 @@ pub fn get_conn() -> Connection {
     Connection::open("data.db").unwrap()
 }
 
-pub fn init(conn: &Connection) -> Result<usize> {
+pub fn init() -> Result<usize> {
+    let conn = get_conn();
     conn.execute(
         "CREATE TABLE IF NOT EXISTS rss (
   id INTEGER PRIMARY KEY NOT NULL,

@@ -37,6 +37,7 @@ async fn main() {
     dotenvy::dotenv().ok();
     env_logger::init();
     info!("start");
-    db::init(&db::get_conn()).expect("init db");
+    db::init().expect("init db");
+    tokio::spawn(rss::rss_monitor_loop());
     main_loop().await;
 }

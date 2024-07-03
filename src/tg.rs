@@ -46,7 +46,7 @@ impl Telegram {
             "disable_web_page_preview": true
         });
         let resp = Client::new()
-            .post(format!("{}/sendMessage", self.prefix))
+            .post(self.prefix.to_owned() + "sendMessage")
             .timeout(std::time::Duration::from_secs(60))
             .header("Content-Type", "application/json")
             .json(&body)
@@ -61,7 +61,7 @@ impl Telegram {
     }
 
     pub async fn process(&mut self, json: Value) {
-        if json["ok"].as_bool().unwrap_or(false) != true {
+        if !json["ok"].as_bool().unwrap_or(false) {
             error!("polling error: {:?}", json["description"]);
         }
         for m in json["result"].as_array().unwrap_or(&vec![]) {

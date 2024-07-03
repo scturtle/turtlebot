@@ -1,6 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::Mutex;
 use tokio::sync::OnceCell;
 
 type Message = (String, String);
@@ -13,14 +14,14 @@ async fn init_channel() -> Arc<Mutex<(UnboundedSender<Message>, UnboundedReceive
 }
 
 pub async fn send(id: &str, msg: &str) {
-    let channel = CHANNEL.get_or_init(init_channel).await.lock().unwrap();
+    let channel = CHANNEL.get_or_init(init_channel).await.lock().await;
     if let Err(e) = channel.0.send((id.to_owned(), msg.to_owned())) {
         log::error!("channel send error {e}");
     };
 }
 
 pub async fn recv() -> Option<(String, String)> {
-    let mut channel = CHANNEL.get_or_init(init_channel).await.lock().unwrap();
+    let mut channel = CHANNEL.get_or_init(init_channel).await.lock().await;
     channel.1.recv().await
 }
 
