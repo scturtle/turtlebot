@@ -1,30 +1,27 @@
+use lazy_static::lazy_static;
 use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::Mutex;
-use tokio::sync::OnceCell;
 
 type Message = (String, String);
 
-static CHANNEL: OnceCell<Arc<Mutex<(UnboundedSender<Message>, UnboundedReceiver<Message>)>>> =
-    OnceCell::const_new();
-
-async fn init_channel() -> Arc<Mutex<(UnboundedSender<Message>, UnboundedReceiver<Message>)>> {
-    Arc::new(Mutex::new(mpsc::unbounded_channel()))
+lazy_static! {
+    static ref CHANNEL: (Sender<Message>, Arc<Mutex<Receiver<Message>>>) = {
+        let (tx, rx) = mpsc::channel(8);
+        (tx, Arc::new(Mutex::new(rx)))
+    };
 }
 
 pub async fn send(id: &str, msg: &str) {
-    let channel = CHANNEL.get_or_init(init_channel).await.lock().await;
-    if let Err(e) = channel.0.send((id.to_owned(), msg.to_owned())) {
+    if let Err(e) = CHANNEL.0.send((id.to_owned(), msg.to_owned())).await {
         log::error!("channel send error {e}");
     };
 }
 
 pub async fn recv() -> Option<(String, String)> {
-    let mut channel = CHANNEL.get_or_init(init_channel).await.lock().await;
-    channel.1.recv().await
+    CHANNEL.1.lock().await.recv().await
 }
 
 pub async fn sleep(n: u64) {
-    tokio::time::sleep(Duration::from_secs(n)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(n)).await;
 }
