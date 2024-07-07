@@ -16,6 +16,13 @@ pub fn init() -> Result<usize> {
   latest_link TEXT NOT NULL)",
         params![],
     )
+    .and(conn.execute(
+        "CREATE TABLE IF NOT EXISTS repo (
+  id INTEGER PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL,
+  latest TEXT NOT NULL)",
+        params![],
+    ))
 }
 
 pub struct Rss {
@@ -75,5 +82,46 @@ pub fn update_rss(
     conn.execute(
         "UPDATE rss set latest_title = ?1, latest_link = ?2 where id = ?3",
         params![latest_title, latest_link, id],
+    )
+}
+
+pub struct Repo {
+    pub id: i32,
+    pub name: String,
+    pub latest: String,
+}
+
+impl TryFrom<&Row<'_>> for Repo {
+    type Error = rusqlite::Error;
+    fn try_from(row: &Row) -> Result<Self> {
+        Ok(Self {
+            id: row.get("id")?,
+            name: row.get("name")?,
+            latest: row.get("latest")?,
+        })
+    }
+}
+
+pub fn list_repo(conn: &Connection) -> Result<Vec<Repo>> {
+    let mut stmt = conn.prepare("SELECT id, name, latest from repo order by id asc")?;
+    let res = stmt.query_map(rusqlite::params![], |r| Repo::try_from(r))?;
+    res.into_iter().collect()
+}
+
+pub fn insert_repo(conn: &Connection, name: &str, latest: &str) -> Result<usize> {
+    conn.execute(
+        "INSERT INTO repo (name, latest) VALUES (?1, ?2)",
+        params![name, latest],
+    )
+}
+
+pub fn delete_repo(conn: &Connection, id_to_del: i32) -> Result<usize> {
+    conn.execute("DELETE FROM repo where id = ?1", params![id_to_del])
+}
+
+pub fn update_repo(conn: &Connection, id: i32, latest: &str) -> Result<usize> {
+    conn.execute(
+        "UPDATE repo set latest = ?1 where id = ?3",
+        params![latest, id],
     )
 }

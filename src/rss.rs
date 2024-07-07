@@ -150,6 +150,7 @@ pub fn register(dispatcher: &mut Dispatcher) {
 
 pub async fn rss_monitor_loop() {
     let cid = std::env::var("MASTER_ID").unwrap();
+    let interval = std::env::var("RSS_INTERVAL").unwrap().parse().unwrap();
     loop {
         let conn = get_conn();
         let rs = list_rss(&conn).unwrap_or_else(|e| {
@@ -215,6 +216,6 @@ pub async fn rss_monitor_loop() {
             }
         }
         drop(conn);
-        sleep(600).await;
+        sleep(interval).await;
     }
 }

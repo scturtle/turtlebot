@@ -1,6 +1,7 @@
 mod db;
 mod dispatcher;
 mod error;
+mod repo;
 mod rss;
 mod tg;
 mod utils;
@@ -11,6 +12,7 @@ use tokio::select;
 async fn main_loop() {
     let mut tg = tg::Telegram::new();
     rss::register(&mut tg.dispatcher);
+    repo::register(&mut tg.dispatcher);
     loop {
         select! {
             to_send = crate::utils::recv() => {
@@ -39,5 +41,6 @@ async fn main() {
     info!("start");
     db::init().expect("init db");
     tokio::spawn(rss::rss_monitor_loop());
+    tokio::spawn(repo::repo_monitor_loop());
     main_loop().await;
 }
