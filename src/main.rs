@@ -34,7 +34,7 @@ async fn main_loop() {
     }
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() {
     dotenvy::dotenv().ok();
     env_logger::init();
