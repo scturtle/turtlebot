@@ -1,16 +1,14 @@
-use lazy_static::lazy_static;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::Mutex;
 
 type Message = (String, String);
 
-lazy_static! {
-    static ref CHANNEL: (Sender<Message>, Arc<Mutex<Receiver<Message>>>) = {
-        let (tx, rx) = mpsc::channel(8);
-        (tx, Arc::new(Mutex::new(rx)))
-    };
-}
+static CHANNEL: LazyLock<(Sender<Message>, Arc<Mutex<Receiver<Message>>>)> = LazyLock::new(|| {
+    let (tx, rx) = mpsc::channel(8);
+    (tx, Arc::new(Mutex::new(rx)))
+});
 
 pub async fn send(id: &str, msg: &str) {
     if let Err(e) = CHANNEL.0.send((id.to_owned(), msg.to_owned())).await {
