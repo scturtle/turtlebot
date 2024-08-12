@@ -128,7 +128,7 @@ pub async fn repo_monitor_loop() {
                 Ok(resp) => resp,
             };
             if latest != r.latest {
-                send(&cid, &format!("[{0}]({0}) {1}", r.name, r.latest)).await;
+                send(&cid, &format!("[{0}]({0}) {1}", r.name, latest)).await;
                 if let Err(e) = update_repo(&conn, r.id, &latest) {
                     error!("{}", e);
                 }
