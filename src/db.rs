@@ -121,7 +121,7 @@ pub fn delete_repo(conn: &Connection, id_to_del: i32) -> Result<usize> {
 
 pub fn update_repo(conn: &Connection, id: i32, latest: &str) -> Result<usize> {
     conn.execute(
-        "UPDATE repo set latest = ?1 where id = ?3",
+        "UPDATE repo set latest = ?1 where id = ?2",
         params![latest, id],
     )
 }
